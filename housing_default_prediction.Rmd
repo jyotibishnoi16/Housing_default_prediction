@@ -1,9 +1,5 @@
 ---
-title: "Dissert Draft 9 sept"
-output:
-  html_document:
-    df_print: paged
-date: "2023-09-09"
+title: "Housing Default Prediction"
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +7,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Libraries, include = FALSE}
-setwd("/Users/jyotismac/Library/CloudStorage/OneDrive-Queen'sUniversityBelfast/Dissertation/Dataset search/Credit default risk- using for dissertation/excel formats")
 # load libraries
 library(readxl)
 library(dplyr)
@@ -108,8 +103,6 @@ df <- df %>% mutate(across(all_of(cols_to_convert), factor))
 # changing negative values of numeric variables to positive
 df <- df %>%
   mutate_if(is.numeric, function(x) ifelse(x < 0, abs(x), x))
-
-
 
 ```
 
