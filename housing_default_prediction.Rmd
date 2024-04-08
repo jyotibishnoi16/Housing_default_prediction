@@ -1,0 +1,2605 @@
+---
+title: "Dissert Draft 9 sept"
+output:
+  html_document:
+    df_print: paged
+date: "2023-09-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, include = FALSE}
+setwd("/Users/jyotismac/Library/CloudStorage/OneDrive-Queen'sUniversityBelfast/Dissertation/Dataset search/Credit default risk- using for dissertation/excel formats")
+# load libraries
+library(readxl)
+library(dplyr)
+library(dlookr)
+library(openxlsx)
+library(ggplot2)
+library(corrplot)
+library(openxlsx)
+library(fields)
+library(RColorBrewer)
+library(forcats)
+library(gridExtra)
+library(tidyr)
+library(neuralnet)
+library(e1071)
+library(caret)
+library(nnet)
+library(rpart)
+library(randomForest)
+library(xgboost)
+library(lightgbm)
+library(pROC)
+library(naivebayes)
+library(plotly)
+library(glmnet)
+
+```
+
+
+```{r load data}
+# load three datasets
+application <- read.csv("application_train.csv") #application
+bureau <- read.csv("bureau.csv") # bureau
+pos_cash <- read.csv("POS_CASH_balance.csv") #pos_cash
+
+```
+
+```{r}
+# converting categorical variables into factor for each dataset
+application <- application%>%
+  mutate_if(is.character, as.factor)
+
+bureau <- bureau%>%
+  mutate_if(is.character, as.factor)
+
+pos_cash <- pos_cash%>%
+  mutate_if(is.character, as.factor)
+
+```
+
+
+```{r renaming}
+
+# changing SK_ID_CURR in all files to numeric to merge the files
+bureau$SK_ID_CURR <- as.numeric(bureau$SK_ID_CURR)
+pos_cash$SK_ID_CURR <- as.numeric(pos_cash$SK_ID_CURR)
+
+# Rename columns with 'BUREAU_' prefix
+new_column_names <- ifelse(names(bureau) != 'SK_ID_CURR', paste0('BUREAU_', names(bureau)), names(bureau))
+names(bureau) <- new_column_names
+
+# Rename columns with 'POS_' prefix
+new_column_names <- ifelse(names(pos_cash) != 'SK_ID_CURR', paste0('POS_', names(pos_cash)), names(pos_cash))
+names(pos_cash) <- new_column_names
+
+```
+
+
+```{r data merge}
+# Merge application with bureau df
+app_bur <- application%>%
+  inner_join(bureau, by = 'SK_ID_CURR')
+
+# Merge application with pos_cash df
+app_pos <- app_bur %>%
+  inner_join(pos_cash, by = 'SK_ID_CURR')
+
+```
+
+
+```{r summary}
+# duplicating the dataset
+df <- app_pos
+
+# run summary
+summary(df)
+
+#converting flaf_document columns into factor
+cols_to_convert <- c("FLAG_DOCUMENT_2", "FLAG_DOCUMENT_3", "FLAG_DOCUMENT_4", "FLAG_DOCUMENT_5", "FLAG_DOCUMENT_6", "FLAG_DOCUMENT_7", "FLAG_DOCUMENT_8", "FLAG_DOCUMENT_9", "FLAG_DOCUMENT_10", "FLAG_DOCUMENT_11", "FLAG_DOCUMENT_12", "FLAG_DOCUMENT_13", "FLAG_DOCUMENT_14", "FLAG_DOCUMENT_15", "FLAG_DOCUMENT_16", "FLAG_DOCUMENT_17", "FLAG_DOCUMENT_18", "FLAG_DOCUMENT_19", "FLAG_DOCUMENT_20", "FLAG_DOCUMENT_21", "FLAG_MOBIL", "FLAG_EMP_PHONE", "FLAG_WORK_PHONE", "FLAG_CONT_MOBILE", "FLAG_PHONE", "FLAG_EMAIL")
+
+# Convert the specified columns into factors
+df <- df %>% mutate(across(all_of(cols_to_convert), factor))
+
+# changing negative values of numeric variables to positive
+df <- df %>%
+  mutate_if(is.numeric, function(x) ifelse(x < 0, abs(x), x))
+
+
+
+```
+
+
+```{r EDA, include=FALSE}
+# plot_bar_category(df, each=TRUE)
+# 
+# plot_outlier(df)
+
+```
+
+```{r missing levels}
+# Creating a new level for OCCUPATION_TYPE for missing values
+df$OCCUPATION_TYPE <- ifelse(df$OCCUPATION_TYPE == "", "unknown", as.character(df$OCCUPATION_TYPE))
+
+# Creating a new level for ORGANIZATION_TYPE for missing values
+df$ORGANIZATION_TYPE <- ifelse(df$ORGANIZATION_TYPE == "", "unknown", as.character(df$ORGANIZATION_TYPE))
+
+# Creating a new level for HOUSETYPE_MODE for missing values
+df$HOUSETYPE_MODE <- ifelse(df$HOUSETYPE_MODE == "", "unknown", as.character(df$HOUSETYPE_MODE))
+
+# Creating a new level for WALLSMATERIAL_MODE for missing values
+df$WALLSMATERIAL_MODE <- ifelse(df$WALLSMATERIAL_MODE == "", "unknown", as.character(df$WALLSMATERIAL_MODE))
+
+# Creating a new level for EMERGENCYSTATE_MODE for missing values
+df$EMERGENCYSTATE_MODE <- ifelse(df$EMERGENCYSTATE_MODE == "", "unknown", as.character(df$EMERGENCYSTATE_MODE))
+
+# Creating a new level for FONDKAPREMONT_MODE for missing values
+df$FONDKAPREMONT_MODE <- ifelse(df$FONDKAPREMONT_MODE == "", "unknown", as.character(df$FONDKAPREMONT_MODE))
+
+# Creating a new level for NAME_TYPE_SUITE for missing values
+df$NAME_TYPE_SUITE <- ifelse(df$NAME_TYPE_SUITE == "", "Others", as.character(df$NAME_TYPE_SUITE))
+
+
+```
+
+```{r regroup levels}
+
+# Combining Business Entity types in ORGANIZATION_TYPE
+df$ORGANIZATION_TYPE <- ifelse(df$ORGANIZATION_TYPE %in% c("Business Entity Type 1",
+                                                                             "Business Entity Type 2",
+                                                                             "Business Entity Type 3"),
+                                        "Business Entity", df$ORGANIZATION_TYPE)
+
+# Combining Trade types in ORGANIZATION_TYPE
+df$ORGANIZATION_TYPE <- ifelse(df$ORGANIZATION_TYPE %in% c("Trade: type 1",
+                                                                             "Trade: type 2",
+                                                                             "Trade: type 3",
+                                                                             "Trade: type 4",
+                                                                             "Trade: type 5",
+                                                                             "Trade: type 6",
+                                                                             "Trade: type 7"),
+                                        "Trade", df$ORGANIZATION_TYPE)
+
+# Combining Transport types in ORGANIZATION_TYPE
+df$ORGANIZATION_TYPE <- ifelse(df$ORGANIZATION_TYPE %in% c("Transport: type 1",
+                                                                             "Transport: type 2",
+                                                                             "Transport: type 3",
+                                                                             "Transport: type 4"),
+                                        "Transport", df$ORGANIZATION_TYPE)
+
+# Combining Industry types in ORGANIZATION_TYPE
+df$ORGANIZATION_TYPE <- ifelse(df$ORGANIZATION_TYPE %in% c("Industry: type 1",
+                                                                             "Industry: type 2",
+                                                                             "Industry: type 3",
+                                                                             "Industry: type 4",
+                                                                             "Industry: type 5",
+                                                                             "Industry: type 6",
+                                                                             "Industry: type 7",
+                                                                             "Industry: type 8",
+                                                                             "Industry: type 9",
+                                                                             "Industry: type 10",
+                                                                             "Industry: type 11",
+                                                                             "Industry: type 12",
+                                                                             "Industry: type 13"),
+                                        "Industry", df$ORGANIZATION_TYPE)
+
+df$NAME_TYPE_SUITE <- ifelse(df$NAME_TYPE_SUITE %in% c("Other_A","Other_B"),"Others",df$NAME_TYPE_SUITE)
+
+
+```
+
+```{r summaries}
+
+# overall summary of dataset
+DQ1 <- diagnose(df)  
+
+# rounding values upto 2 decimal in missing_percent column
+DQ1$missing_percent <- round(DQ1$missing_percent,2)
+
+# rounding values upto 2 decimal in unique_rate column
+DQ1$unique_rate <- round(DQ1$unique_rate,2)
+
+# summary of categorical variables
+DQC <- diagnose_category(df) 
+
+# summary of numerical variables
+DQN <- diagnose_numeric(df)
+
+```
+
+```{r missing value plot}
+ggplot(data = DQ1, aes(x = variables, y = missing_percent)) +
+  geom_bar(color = "steelblue",stat = "identity") +
+  geom_hline(yintercept = 40, linetype = 'dashed', color = 'red') +
+  labs(title = "Percentage of Missing values in application data",
+       x = "Variables",
+       y = "Missing Values PERCENTAGE") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 7))
+
+# segregating variables with more than 40% missing values
+null_values_col <- DQ1 %>%
+  filter(missing_percent >= 40)%>%
+  select(variables, missing_percent)
+
+
+```
+
+```{r Visualisations, warning=FALSE}
+
+# change target variable into factor
+df$TARGET <- as.factor(df$TARGET)
+
+# 1. Piechart for target variable ####
+
+# Creating a df with target counts
+target_val <- table(df$TARGET)
+target_df <- data.frame(labels = names(target_val), values = target_val)
+
+# change target levels
+new_labels <- c("Loan Repaid","Defaulter")
+target_df$labels <- factor(target_df$labels, levels = names(target_val), labels = new_labels)
+
+# Create a pie chart
+pie_chart <- plot_ly(target_df, labels = ~labels, values = ~values.Freq, type = "pie", hole = 0.6) %>%
+  layout(title = list(text = "Target variable", font = list(size = 24), y = 0.5),
+         legend = list(font = list(size = 16)),
+         showlegend = TRUE,
+         annotations = list(textinfo = "percent+label", font = list(size = 16)))
+
+# show the plot
+pie_chart
+
+# 2. Piechart for loan contract type counts ####
+
+# Creating a df with loan contract type counts
+contract_val <- table(df$NAME_CONTRACT_TYPE)
+contract_df <- data.frame(labels = names(contract_val), values = contract_val)
+
+# Create a pie chart
+pie_chart <- plot_ly(contract_df, labels = ~labels, values = ~values.Freq, type = "pie", hole = 0.6) %>%
+  layout(title = "Types of Loan")
+
+# show the plot
+pie_chart
+
+# 3. Histogram for distribution of amt_income_total ####
+
+# subset the data (AMT_INCOME_TOTAL < 2000000)
+income_data <- df[df$AMT_INCOME_TOTAL < 2000000, ]
+
+# Create a histogram plot
+hist_income <- plot_ly(data = income_data, x = ~AMT_INCOME_TOTAL, type = "histogram", nbinsx = 100) %>%
+  layout(xaxis = list(title = "Total Income"), 
+         yaxis = list(title = "Count of applicants"),
+         title = "Distribution of AMT_INCOME_TOTAL")
+
+# Display the plot
+hist_income
+
+
+# 4. Histogram for distribution of amt_credit ####
+# subset the data (AMT_INCOME_TOTAL < 2000000)
+credit_data <- df[df$AMT_INCOME_TOTAL < 2000000, ]
+
+# Create a histogram plot
+hist_credit <- plot_ly(data = df, x = ~AMT_CREDIT, type = "histogram", nbinsx = 100) %>%
+  layout(xaxis = list(title = "Amount Credit"), 
+         yaxis = list(title = "Count of applicants"),
+         title = "Distribution of AMT_CREDIT")
+
+# Display the plot
+hist_credit
+
+# Create a histogram of log(AMT_CREDIT)
+hist_credit_log <- plot_ly(data = df, x = ~log(df$AMT_CREDIT), type = "histogram", nbinsx = 100) %>%
+  layout(xaxis = list(title = "log(Credit Amount)"), 
+         yaxis = list(title = "Count of applicants"),
+         title = "Distribution of log(AMT_CREDIT)")
+
+# Show the histogram 
+hist_credit_log
+
+# 5. Barplot for Gender vs target ####
+
+# Calculate the frequency of levels for CODE_GENDER
+gender_freq <- table(df$CODE_GENDER)
+
+# Creating empty lists for counts of each level of 'TARGET' 
+gender_def <- numeric(length(gender_freq))
+gender_nodef <- numeric(length(gender_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_TYPE_SUITE'
+for (val in names(gender_freq)) {
+  gender_def[val] <- sum(df$TARGET[df$CODE_GENDER == val] == 1)
+  gender_nodef[val] <- sum(df$TARGET[df$CODE_GENDER == val] == 0)
+}
+
+# Calculate % of default and no default
+per_def <- (gender_def / sum(gender_freq)) * 100
+per_nodef <- (gender_nodef / sum(gender_freq)) * 100
+
+# Create a data frame
+gender_df <- data.frame(
+  gender = names(gender_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = gender_df, x = ~gender) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Gender in terms of loan is repaid or not in %",
+    xaxis = list(title = "Gender"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+
+
+# 6. Barplot of Name_type_suite vs Target ####
+
+# Calculate the frequency of levels for NAME_TYPE_SUITE
+suite_freq <- table(df$NAME_TYPE_SUITE)
+
+# Creating empty lists for counts of each level of 'TARGET' 
+suite_def <- numeric(length(suite_freq))
+suite_nodef <- numeric(length(suite_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_TYPE_SUITE'
+for (val in names(suite_freq)) {
+  suite_def[val] <- sum(df$TARGET[df$NAME_TYPE_SUITE == val] == 1)
+  suite_nodef[val] <- sum(df$TARGET[df$NAME_TYPE_SUITE == val] == 0)
+}
+
+# Calculate % of default and no default
+per_def <- (suite_def / sum(suite_freq)) * 100
+per_nodef <- (suite_nodef / sum(suite_freq)) * 100
+
+# Create a data frame
+suite_df <- data.frame(
+  Name_type_Suite = names(suite_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = suite_df, x = ~Name_type_Suite) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Who accompanied client when applying for the application 
+    in terms of loan is repaid or not in %",
+    xaxis = list(title = "Name of type of the Suite"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+
+# 7. Barplot of Name_income_type vs Target ####
+
+# Calculate the frequency of levels for NAME_INCOME_TYPE
+income_type_freq <- table(df$NAME_INCOME_TYPE)
+
+# Creating empty lists for counts of each level of 'TARGET'
+income_def <- numeric(length(income_type_freq))
+income_nodef <- numeric(length(income_type_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_INCOME_SUITE'
+for (val in names(income_type_freq)) {
+  income_def[val] <- sum(df$TARGET[df$NAME_INCOME_TYPE == val] == 1)
+  income_nodef[val] <- sum(df$TARGET[df$NAME_INCOME_TYPE == val] == 0)
+}
+
+# Calculate % of default and no default
+per_def <- (income_def / sum(income_type_freq)) * 100
+per_nodef <- (income_nodef / sum(income_type_freq)) * 100
+
+# Create a data frame
+income_df <- data.frame(
+  Name_income_type = names(income_type_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = income_df, x = ~Name_income_type) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Income sources of applicant in terms of loan is repaid or not in %",
+    xaxis = list(title = "Income Source"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+
+# 8. Barplot of Education type vs Target####
+
+# Calculate the frequency of levels for NAME_EDUCATION_TYPE
+edu_freq <- table(df$NAME_EDUCATION_TYPE)
+
+# Creating empty lists for counts of each level of 'TARGET' 
+edu_def <- numeric(length(edu_freq))
+edu_nodef <- numeric(length(edu_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_EDUCATION_SUITE'
+for (val in names(edu_freq)) {
+  edu_def[val] <- sum(df$TARGET[df$NAME_EDUCATION_TYPE == val] == 1)
+  edu_nodef[val] <- sum(df$TARGET[df$NAME_EDUCATION_TYPE == val] == 0)
+}
+
+# Calculate % of default and no default
+per_def <- (edu_def / sum(edu_freq)) * 100
+per_nodef <- (edu_nodef / sum(edu_freq)) * 100
+
+# Create a data frame
+edu_df <- data.frame(
+  edu_type = names(edu_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = edu_df, x = ~edu_type) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Education Level of applicant grouped by loan is repaid or not in %",
+    xaxis = list(title = "Education Level"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+# 9. Barplot of Family_status vs Target ####
+
+# Calculate the frequency of levels for NAME_FAMILY_STATUS
+fam_freq <- table(df$NAME_FAMILY_STATUS)
+
+# Initialize empty lists for counts of 'TARGET' values
+fam_def <- numeric(length(fam_freq))
+fam_nodef <- numeric(length(fam_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_FAMILY_STATUS'
+for (val in names(fam_freq)) {
+  fam_def[val] <- sum(df$TARGET[df$NAME_FAMILY_STATUS == val] == 1)
+  fam_nodef[val] <- sum(df$TARGET[df$NAME_FAMILY_STATUS == val] == 0)
+}
+
+# Calculate percentages
+per_def <- (fam_def / sum(fam_freq)) * 100
+per_nodef <- (fam_nodef / sum(fam_freq)) * 100
+
+# Create a data frame
+fam_df <- data.frame(
+  fam_type = names(fam_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = fam_df, x = ~fam_type) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Family Status of applicant grouped by loan is repaid or not in %",
+    xaxis = list(title = "Family Status"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+
+# 10. Barplot of Housing_type vs Target ####
+# Calculate the frequency of levels for NAME_FAMILY_STATUS
+house_freq <- table(df$NAME_FAMILY_STATUS)
+
+# Initialize empty lists for counts of 'TARGET' values
+house_def <- numeric(length(house_freq))
+house_nodef <- numeric(length(house_freq))
+
+# Calculate counts for 'TARGET' values by 'NAME_FAMILY_STATUS'
+for (val in names(house_freq)) {
+  house_def[val] <- sum(df$TARGET[df$NAME_FAMILY_STATUS == val] == 1)
+  house_nodef[val] <- sum(df$TARGET[df$NAME_FAMILY_STATUS == val] == 0)
+}
+
+# Calculate percentages
+per_def <- (house_def / sum(house_freq)) * 100
+per_nodef <- (house_nodef / sum(house_freq)) * 100
+
+# Create a data frame
+house_df <- data.frame(
+  house_type = names(house_freq),
+  Count_Yes = per_def,
+  Count_No = per_nodef
+)
+
+# Create a grouped bar chart
+barchart <- plot_ly(data = house_df, x = ~house_type) %>%
+  add_trace(y = ~Count_Yes, name = "Default", type = "bar") %>%
+  add_trace(y = ~Count_No, name = "Repaid", type = "bar") %>%
+  layout(
+    title = "Family Status of applicant grouped by loan is repaid or not in %",
+    xaxis = list(title = "Family Status"),
+    yaxis = list(title = "Count of applicants in %")
+  ) %>%
+  layout(template = "plotly_dark")
+
+# Display the grouped bar chart
+barchart
+
+# 11. Distribution of borrower Age ####
+# copy of df
+df_copy <- df
+# rename the levels of the 'TARGET' variable
+df_copy$TARGET <- factor(df_copy$TARGET, levels = c(0, 1), labels = c("Loan Repaid", "Default"))
+
+# Create a histogram plot
+hist_age <- ggplot(data = df_copy, aes(x = DAYS_BIRTH, color = factor(TARGET))) +
+  geom_histogram(binwidth = 1, size = 1) +
+  labs(x = "Age", y = "Count of applicants") +
+  ggtitle("Distribution of Borrower's Age") +
+  scale_color_manual(values = c("Loan Repaid" = "blue", "Default" = "red")) +
+  theme_minimal()
+
+# Display the histogram plot
+hist_age
+
+# 12. Distribution of employment period ####
+# subset the data (AMT_INCOME_TOTAL < 2000000)
+emp_data <- df_copy[df_copy$DAYS_EMPLOYED < 15000, ]
+
+# Create a histogram plot
+hist_emp <- ggplot(data = emp_data, aes(x = DAYS_EMPLOYED, color = factor(TARGET))) +
+  geom_histogram(binwidth = 1, size = 1) +
+  labs(x = "Age", y = "Count of applicants") +
+  ggtitle("Years in Employment before application") +
+  scale_color_manual(values = c("Loan Repaid" = "blue", "Default" = "red")) +
+  theme_minimal()
+
+# Display the histogram plot
+hist_emp
+
+# 13. Density plots of numeric variables ####
+# Numeric variables
+# l <- c("AMT_INCOME_TOTAL", "AMT_CREDIT", "AMT_ANNUITY","AMT_GOODS_PRICE", "EXT_SOURCE_2","EXT_SOURCE_3","YRS_EMPLOYED", "YRS_REGISTRATION","OBS_60_CNT_SOCIAL_CIRCLE", "DEF_60_CNT_SOCIAL_CIRCLE", "LIVINGAREA_AVG")
+
+##### numeric var vector ####
+
+
+var_avg <- c("APARTMENTS_AVG","BASEMENTAREA_AVG", "YEARS_BEGINEXPLUATATION_AVG", "YEARS_BUILD_AVG", "COMMONAREA_AVG","ELEVATORS_AVG", "ENTRANCES_AVG", "FLOORSMAX_AVG", "FLOORSMIN_AVG","LANDAREA_AVG", "LIVINGAPARTMENTS_AVG", "LIVINGAREA_AVG", "NONLIVINGAPARTMENTS_AVG", "NONLIVINGAREA_AVG")
+var_mod <- c("APARTMENTS_MODE", "BASEMENTAREA_MODE", "YEARS_BEGINEXPLUATATION_MODE", "YEARS_BUILD_MODE","COMMONAREA_MODE", "ELEVATORS_MODE", "ENTRANCES_MODE", "FLOORSMAX_MODE", "FLOORSMIN_MODE", "LANDAREA_MODE", "LIVINGAPARTMENTS_MODE", "LIVINGAREA_MODE", "NONLIVINGAPARTMENTS_MODE","NONLIVINGAREA_MODE","TOTALAREA_MODE")
+var_med <- c("APARTMENTS_MEDI", "BASEMENTAREA_MEDI", "YEARS_BEGINEXPLUATATION_MEDI", "YEARS_BUILD_MEDI", "COMMONAREA_MEDI", "ELEVATORS_MEDI", "ENTRANCES_MEDI", "FLOORSMAX_MEDI", "FLOORSMIN_MEDI", "LANDAREA_MEDI", "LIVINGAPARTMENTS_MEDI", "LIVINGAREA_MEDI", "NONLIVINGAPARTMENTS_MEDI", "NONLIVINGAREA_MEDI")
+var_demo <- c("CNT_CHILDREN", "AMT_INCOME_TOTAL", "AMT_CREDIT", "AMT_ANNUITY", "AMT_GOODS_PRICE", "REGION_POPULATION_RELATIVE", "DAYS_BIRTH", "DAYS_EMPLOYED", "DAYS_REGISTRATION", "DAYS_ID_PUBLISH","OWN_CAR_AGE", "CNT_FAM_MEMBERS","POS_MONTHS_BALANCE", "POS_CNT_INSTALMENT", "POS_CNT_INSTALMENT_FUTURE", "POS_SK_DPD", "POS_SK_DPD_DEF")
+var_reg <- c("REGION_RATING_CLIENT", "REGION_RATING_CLIENT_W_CITY","HOUR_APPR_PROCESS_START", "REG_REGION_NOT_LIVE_REGION", "REG_REGION_NOT_WORK_REGION","LIVE_REGION_NOT_WORK_REGION", "REG_CITY_NOT_LIVE_CITY", "REG_CITY_NOT_WORK_CITY", "LIVE_CITY_NOT_WORK_CITY", "EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3")
+var_credit <- c("OBS_30_CNT_SOCIAL_CIRCLE", "OBS_60_CNT_SOCIAL_CIRCLE","DEF_30_CNT_SOCIAL_CIRCLE", "DAYS_LAST_PHONE_CHANGE", "AMT_REQ_CREDIT_BUREAU_HOUR", "AMT_REQ_CREDIT_BUREAU_DAY", "AMT_REQ_CREDIT_BUREAU_WEEK", "AMT_REQ_CREDIT_BUREAU_MON", "AMT_REQ_CREDIT_BUREAU_QRT", "AMT_REQ_CREDIT_BUREAU_YEAR")
+var_bur <- c("BUREAU_DAYS_CREDIT", "BUREAU_CREDIT_DAY_OVERDUE", "BUREAU_DAYS_CREDIT_ENDDATE", "BUREAU_DAYS_ENDDATE_FACT", "BUREAU_AMT_CREDIT_MAX_OVERDUE", "BUREAU_CNT_CREDIT_PROLONG", "BUREAU_AMT_CREDIT_SUM", "BUREAU_AMT_CREDIT_SUM_DEBT", "BUREAU_AMT_CREDIT_SUM_LIMIT", "BUREAU_AMT_CREDIT_SUM_OVERDUE", "BUREAU_DAYS_CREDIT_UPDATE", "BUREAU_AMT_ANNUITY")
+
+# Create an empty list to store the plots
+kde_plots <- list()
+
+# Loop 1 through the list of columns and create density plots
+for (col in var_avg) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+
+# Loop 2 through the list of columns and create density plots
+for (col in var_mod) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+
+# Loop 3 through the list of columns and create density plots
+for (col in var_med) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+
+# Loop 4 through the list of columns and create density plots
+for (col in var_demo) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+# Loop 5 through the list of columns and create density plots
+for (col in var_reg) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+# Loop 6 through the list of columns and create density plots
+for (col in var_credit) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+# Create an empty list to store the plots
+kde_plots <- list()
+# Loop 7 through the list of columns and create density plots
+for (col in var_bur) {
+  # Create a ggplot object for each column
+  plot <- ggplot(data = df_copy, aes_string(x = col)) +
+    geom_density(alpha = 0.5, fill = "blue") +
+    labs(x = col, y = "Density") +
+    theme_minimal()
+  # Add the plot to the list
+  kde_plots[[col]] <- plot
+}
+
+# Combine the plots into a grid
+grid.arrange(grobs = kde_plots, ncol = 3)
+
+```
+
+
+```{r dealing with missing values}
+
+# filtering variables with less than 5% missing values
+missing_var <- DQ1%>%
+  filter(missing_percent < 5)
+
+# extracting variable names from above object into a vector
+columns_to_check <- missing_var$variables
+
+# dropping missing values in above chosen variables
+df_filtered <- subset(df, complete.cases(df[, columns_to_check]))
+
+# Dropping missing values in GENDER
+df_filtered <- df_filtered %>% 
+  filter(CODE_GENDER != "XNA")
+df_filtered$CODE_GENDER <- droplevels(df_filtered$CODE_GENDER)
+
+# Replacing missing values in OWN_CAR_AGE by 0 if FLAG_OWN_CAR variable value is N
+df_filtered$OWN_CAR_AGE <- ifelse(df_filtered$FLAG_OWN_CAR == "N" & is.na(df_filtered$OWN_CAR_AGE), 0, df_filtered$OWN_CAR_AGE)
+df_filtered <- subset(df_filtered, complete.cases(df_filtered[,"OWN_CAR_AGE"]))
+
+# change days into years ####
+
+df_filtered$DAYS_BIRTH <- round(df_filtered$DAYS_BIRTH/365, 0)
+df_filtered$DAYS_EMPLOYED[is.na(df_filtered$DAYS_EMPLOYED)] <- 0
+df_filtered$DAYS_EMPLOYED <- round(df_filtered$DAYS_EMPLOYED/365, 2)
+df_filtered$DAYS_REGISTRATION <- round(df_filtered$DAYS_REGISTRATION/365, 2)
+df_filtered$DAYS_ID_PUBLISH <- round(df_filtered$DAYS_ID_PUBLISH/365, 2)
+
+# renaming columns
+colnames(df_filtered)[grep("DAYS_BIRTH", colnames(df_filtered))] <- "AGE"
+colnames(df_filtered)[grep("DAYS_EMPLOYED", colnames(df_filtered))] <- "YRS_EMPLOYED"
+colnames(df_filtered)[grep("DAYS_REGISTRATION", colnames(df_filtered))] <- "YRS_REGISTRATION"
+colnames(df_filtered)[grep("DAYS_ID_PUBLISH", colnames(df_filtered))] <- "YRS_ID_PUBLISH"
+
+# getting summary of df_filtered
+DQ <- diagnose(df_filtered)
+# segregating variables with more than 40% missing values
+null_values_col <- DQ %>%
+  filter(missing_percent >= 40)%>%
+  select(variables, missing_percent)
+
+# excluding _AVG related variables for imputation at later stage
+null_val_drop <- null_values_col[-c(2:15), ]
+
+# extracting variable names from above object into a vector
+cols_to_drop <- null_val_drop$variables
+
+# subset data to drop above columns
+df_subset <- df_filtered[, !colnames(df_filtered) %in% cols_to_drop]
+
+# drop currency column,flag_mobile column and flag_cnt_mobile as only one level has values
+df_subset <- df_subset%>%
+  select(-BUREAU_CREDIT_CURRENCY,-FLAG_MOBIL,-FLAG_CONT_MOBILE )
+
+# drop SK_ID_CURR column as not required
+df_subset <- df_subset%>%
+  select(-SK_ID_CURR)
+
+# change categorical variables to factor
+df_subset <- df_subset%>%
+  mutate_if(is.character,as.factor)
+
+
+```
+
+
+```{r flag doc, warning=FALSE}
+# extracting flag_document columns fromcols_to_convert vector
+flag_col <- cols_to_convert[1:20]
+
+# creating a new dataframe by subsetting df_filtered on flag_document columns
+df_flag <- df_subset[,flag_col]
+
+# adding TARGET column to new dataframe after changing TARGET column to factor
+df_subset$TARGET <- as.factor(df_subset$TARGET)
+df_flag$TARGET <- df_subset$TARGET
+
+# renaming the levels to Repayer and Defaulter
+df_flag$TARGET <- factor(df_flag$TARGET, levels = c(0, 1), labels = c("Repayer", "Defaulter"))
+# df_flag$TARGET <- factor(df_flag$TARGET)
+
+# Change levels to "no" and "yes" for each variable in df_flag_1
+df_flag <- df_flag %>%
+  mutate(across(all_of(flag_col), ~ ifelse(. == 0, "no", "yes")))
+
+# Create a list to store plots
+plot_list <- list()
+i = 1:20
+# Iterate through col_Doc and create count plots
+for (i in flag_col) {
+  p <- ggplot(df_flag, aes_string(x = i, fill = "TARGET")) +
+    geom_bar(position = "dodge") +
+    theme_minimal() +
+    labs(x = "", y = "count") +
+    ggtitle(i) +
+    scale_fill_manual(values = c("Repayer" = "blue", "Defaulter" = "red")) +
+    theme(legend.title = element_text("target"), # Remove legend title
+          legend.position = "right",     # Move legend to the bottom
+          legend.text = element_text(size = 8), # Adjust legend text size
+          axis.text = element_text(size = 12,face = "bold"), # Adjust axis text size
+          strip.text = element_text(size = 5),  # Adjust facet label text size
+          plot.title = element_text(size = 12, face = "bold"), # Adjust plot title size and font
+          # strip.background = element_rect(fill = "white")) # Change facet label background color
+    )
+  plot_list[[i]] <- p
+}
+
+options(repr.plot.width = 20, repr.plot.height = 18)
+# Arrange plots in two grids and display
+grid1 <- do.call(grid.arrange, c(plot_list[1:9], ncol = 3))
+grid2 <- do.call(grid.arrange, c(plot_list[(10:20)], ncol = 3))
+
+# excluding flag_document_3 from list of columns to be dropped
+flag_drop <- flag_col[-2]
+
+df_subset <- df_subset[, !colnames(df_subset) %in% flag_drop]
+
+
+```
+
+```{r outliers}
+df_pre <- df_subset
+
+# deleting outliers in cnt_children
+df_pre <- df_pre%>%
+  filter(CNT_CHILDREN <=5)
+
+# deleting outliers in amt_income_total
+df_pre <- df_pre %>%
+  filter(AMT_INCOME_TOTAL <= 400000)
+
+# deleting outliers in amt_credit
+df_pre  <- df_pre %>%
+  filter(AMT_CREDIT <= 2000000)
+
+# deleting outliers in region_population_relative
+df_pre <- df_pre %>%
+  filter(REGION_POPULATION_RELATIVE <= 0.06)
+
+# deleting outliers in yrs_employed
+df_pre  <- df_pre %>%
+  filter(YRS_EMPLOYED <= 60)
+
+# deleting outliers in days_registration
+df_pre <- df_pre %>%
+  filter(YRS_REGISTRATION <= 40)
+
+# deleting outliers in own_car_age
+df_pre  <- df_pre %>%
+  filter(OWN_CAR_AGE <= 25)
+
+# deleting outliers in CNT_FAM_MEMBERS
+df_pre <- df_pre%>%
+  filter(CNT_FAM_MEMBERS <= 5)
+
+# deleting outliers in days_last_phone_change
+df_pre <- df_pre%>%
+  filter(DAYS_LAST_PHONE_CHANGE<= 3500)
+
+# # deleting outliers in amt_req_credit_bureau_year
+# df_pre <- df_pre%>%
+#   filter(AMT_REQ_CREDIT_BUREAU_YEAR <= 10)
+
+# deleting outliers in bureau_days_credit_enddate
+df_pre <- df_pre%>%
+  filter(BUREAU_DAYS_CREDIT_ENDDATE <= 11000)
+
+# deleting outliers in bureau_amt_credit_sum
+df_pre <- df_pre%>%
+  filter(BUREAU_AMT_CREDIT_SUM <= 1500000)
+
+# # deleting outliers in  bureau_days_credit_update
+# df_pre <- df_pre%>%
+#   filter(BUREAU_DAYS_CREDIT_UPDATE <= 2000)
+
+
+```
+
+
+```{r Imputation}
+
+df_pre$APARTMENTS_AVG[is.na(df_pre$APARTMENTS_AVG)] <- mean(df_pre$APARTMENTS_AVG,na.rm=TRUE)
+df_pre$BASEMENTAREA_AVG[is.na(df_pre$BASEMENTAREA_AVG)] <- mean(df_pre$BASEMENTAREA_AVG,na.rm=TRUE)
+df_pre$YEARS_BEGINEXPLUATATION_AVG[is.na(df_pre$YEARS_BEGINEXPLUATATION_AVG)] <- mean(df_pre$YEARS_BEGINEXPLUATATION_AVG,na.rm=TRUE)
+df_pre$YEARS_BUILD_AVG[is.na(df_pre$YEARS_BUILD_AVG)] <- mean(df_pre$YEARS_BUILD_AVG,na.rm=TRUE)
+df_pre$COMMONAREA_AVG[is.na(df_pre$COMMONAREA_AVG)] <- mean(df_pre$COMMONAREA_AVG,na.rm=TRUE)
+df_pre$ELEVATORS_AVG[is.na(df_pre$ELEVATORS_AVG)] <- mean(df_pre$ELEVATORS_AVG,na.rm=TRUE)
+df_pre$ENTRANCES_AVG[is.na(df_pre$ENTRANCES_AVG)] <- mean(df_pre$ENTRANCES_AVG,na.rm=TRUE)
+df_pre$FLOORSMAX_AVG[is.na(df_pre$FLOORSMAX_AVG)] <- mean(df_pre$FLOORSMAX_AVG,na.rm=TRUE)
+df_pre$FLOORSMIN_AVG[is.na(df_pre$FLOORSMIN_AVG)] <- mean(df_pre$FLOORSMIN_AVG,na.rm=TRUE)
+df_pre$LANDAREA_AVG[is.na(df_pre$LANDAREA_AVG)] <- mean(df_pre$LANDAREA_AVG,na.rm=TRUE)
+df_pre$LIVINGAPARTMENTS_AVG[is.na(df_pre$LIVINGAPARTMENTS_AVG)] <- mean(df_pre$LIVINGAPARTMENTS_AVG,na.rm=TRUE)
+df_pre$LIVINGAREA_AVG[is.na(df_pre$LIVINGAREA_AVG)] <- mean(df_pre$LIVINGAREA_AVG,na.rm=TRUE)
+df_pre$NONLIVINGAPARTMENTS_AVG[is.na(df_pre$NONLIVINGAPARTMENTS_AVG)] <- mean(df_pre$NONLIVINGAPARTMENTS_AVG,na.rm=TRUE)
+df_pre$NONLIVINGAREA_AVG[is.na(df_pre$NONLIVINGAREA_AVG)] <- mean(df_pre$NONLIVINGAREA_AVG,na.rm=TRUE)
+
+df_pre$BUREAU_AMT_CREDIT_MAX_OVERDUE[is.na(df_pre$BUREAU_AMT_CREDIT_MAX_OVERDUE)] <- mean(df_pre$BUREAU_AMT_CREDIT_MAX_OVERDUE, na.rm=TRUE)
+df_pre$BUREAU_AMT_CREDIT_SUM_LIMIT[is.na(df_pre$BUREAU_AMT_CREDIT_SUM_LIMIT)] <- mean(df_pre$BUREAU_AMT_CREDIT_SUM_LIMIT, na.rm=TRUE)
+df_pre$BUREAU_DAYS_ENDDATE_FACT[is.na(df_pre$BUREAU_DAYS_ENDDATE_FACT)] <- mean(df_pre$BUREAU_DAYS_ENDDATE_FACT, na.rm=TRUE)
+df_pre$EXT_SOURCE_3[is.na(df_pre$EXT_SOURCE_3)] <- mean(df_pre$EXT_SOURCE_3, na.rm=TRUE)
+
+```
+
+```{r likert scale}
+df1 <- df_pre
+# changing categorical variables to factor
+df1 <- df1 %>%
+  mutate_if(is.character, as.factor)
+
+# converting TARGET variable back to numeric to avoid changing into likert scale 1,2
+df1$TARGET <- as.numeric(df1$TARGET)-1
+
+
+# Identify columns that are factors
+factor_vars <- sapply(df1, is.factor)
+
+# Initialize an empty list to store encoding information
+encoding_info_list <- list()
+
+# Iterate through factor columns and encode them individually
+for (column_name in names(df1)[factor_vars]) {
+
+  # Get the unique levels of the current column
+  levels_column <- levels(df1[[column_name]])
+
+  # Create a mapping of original labels to encoded values
+  encoding_map <- setNames(1:length(levels_column), levels_column)
+
+  # Use the mapping to replace the levels with numeric values
+  df1[[column_name]] <- as.factor(as.integer(encoding_map[as.character(df1[[column_name]])]))
+
+  # Create a data frame for encoding info for the current column
+  encoding_info <- data.frame(
+    Original_labels = as.character(levels_column),
+    Encoded_levels = as.integer(1:length(levels_column))
+  )
+
+  # Store the encoding info in the list
+  encoding_info_list[[column_name]] <- encoding_info
+
+  # Print the information for the current column
+  cat(paste("Column: ", column_name, "\n"))
+  print(encoding_info)
+}
+
+# Combine encoding info into a single data frame
+encoding_info_df <- do.call(rbind, encoding_info_list)
+
+
+```
+
+
+```{r feature engineering}
+
+df_featured <- df1
+
+# flag for income greater than credit amount
+df_featured$INCOME_GT_CREDIT_FLAG <- factor(as.integer(df_featured$AMT_INCOME_TOTAL > df_featured$AMT_CREDIT),levels = c(0, 1))
+
+# Column to represent Credit amount to income Ratio
+df_featured$CREDIT_INCOME_RATIO <- round((df_featured$AMT_CREDIT / df_featured$AMT_INCOME_TOTAL),2)
+
+# Column to represent Annuity to income ratio
+df_featured$ANNUITY_INCOME_RATIO <- round((df_featured$AMT_ANNUITY / df_featured$AMT_INCOME_TOTAL),2)
+
+# Credit term as ratio of amt credit to annuity
+df_featured$CREDIT_TERM <- round((df_featured$AMT_CREDIT / df_featured$AMT_ANNUITY),2)
+
+# Days employed % in life
+df_featured$EMPLOYED_TO_AGE_RATIO <- round((df_featured$YRS_EMPLOYED /df_featured$AGE),2)
+
+# Debt over credit ratio
+# bureau <- bureau
+df_featured$BUREAU_AMT_CREDIT_SUM[is.na(df_featured$BUREAU_AMT_CREDIT_SUM)] <- 0
+df_featured$BUREAU_AMT_CREDIT_SUM_DEBT[is.na(df_featured$BUREAU_AMT_CREDIT_SUM_DEBT)] <- 0
+
+df_featured$BUREAU_DEBT_CREDIT_RATIO <- round((df_featured$BUREAU_AMT_CREDIT_SUM_DEBT/ df_featured$BUREAU_AMT_CREDIT_SUM),2)
+
+df_featured$BUREAU_DEBT_CREDIT_RATIO[is.na(df_featured$BUREAU_DEBT_CREDIT_RATIO)] <- 0
+df_featured$BUREAU_DEBT_CREDIT_RATIO[is.infinite(df_featured$BUREAU_DEBT_CREDIT_RATIO)] <- 0
+df_featured$BUREAU_DEBT_CREDIT_RATIO <- as.numeric(df_featured$BUREAU_DEBT_CREDIT_RATIO)
+
+# overdue over debt ratio
+
+df_featured$BUREAU_AMT_CREDIT_SUM_OVERDUE[is.na(df_featured$BUREAU_AMT_CREDIT_SUM_OVERDUE)] <- 0
+df_featured$OVERDUE_DEBT_RATIO <- round((df_featured$BUREAU_AMT_CREDIT_SUM_OVERDUE/df_featured$BUREAU_AMT_CREDIT_SUM_DEBT),2)
+
+df_featured$OVERDUE_DEBT_RATIO[is.na(df_featured$OVERDUE_DEBT_RATIO)] <- 0
+df_featured$OVERDUE_DEBT_RATIO[is.infinite(df_featured$OVERDUE_DEBT_RATIO)] <- 0
+df_featured$OVERDUE_DEBT_RATIO <- as.numeric(df_featured$OVERDUE_DEBT_RATIO)
+
+
+```
+
+```{r feature importance}
+# change target variable into factor
+df_featured$TARGET <- as.factor(df_featured$TARGET)
+
+# Separate target variable from features
+y <- df_featured$TARGET
+X <- df_featured[, !(names(df_featured) %in% c('TARGET'))]
+
+# Split data into training and temporary sets
+set.seed(40385928)  # For reproducibility
+index <- createDataPartition(y, p = 0.7, list = FALSE)
+X_train <- X[index, ]
+y_train <- y[index]
+X_test <- X[-index, ]
+y_test <- y[-index]
+
+# Fit and transform scaler on the training data
+preproc <- preProcess(X_train, method = c("center", "scale"))
+
+# Transform train data using the same scaler
+X_train_scaled <- predict(preproc, X_train)
+
+# Example: Train a random forest model
+model_rf <- randomForest(y_train ~ ., data = X_train_scaled, ntree = 100)
+
+# Get feature importance scores
+importance_scores_rf <- importance(model_rf)
+
+# Convert the 'importance' object to a data frame
+importance_df <- data.frame(
+  Feature = rownames(importance_scores_rf),
+  Importance = importance_scores_rf)
+
+# Arrange the data frame in decreasing order of MeanDecreaseGini
+importance_df <- importance_df %>%
+  arrange(desc(MeanDecreaseGini))
+
+# Calculate the total sum of Gain values
+total_gain <- sum(importance_df$MeanDecreaseGini)
+
+# Calculate percentage importance for each feature
+importance_df$Percentage <- (importance_df$MeanDecreaseGini / total_gain) * 100
+
+# Create the bar plot
+p <- ggplot(importance_df[1:20, ], aes(x = reorder(Feature, Percentage), y = Percentage)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), vjust = 0.4, size = 4) +
+  coord_flip() +
+  labs(title = "Feature Importance",
+       x = "Features",
+       y = "Percentage Importance") +
+  theme_minimal()
+
+# Print the plot
+print(p)
+
+```
+
+```{r heriarchical clustering}
+#### Clustering ####
+df_new <- df_featured%>%
+  mutate_if(is.character, as.factor)
+
+# move TARGET column at the end
+col_names <- colnames(df_new)
+new_col_order <- c(col_names[-1], col_names[1])
+
+df_new <- df_new[new_col_order]
+
+# selecing variables for creating clusters
+# df_cs <- df_new[c(1:6,11:14,16,17,25,26)]
+df_cs <- df_new[c(-115)]
+
+# z <- diagnose(df_cs)
+# # Get the factor variables in the dataset
+# factor_vars <- sapply(df_cs, is.factor)
+# 
+# # Loop through each factor variable and change levels to numeric
+# for (var in names(df_cs)[factor_vars]) {
+#   df_cs[[var]] <- as.factor(df_cs[[var]])
+#   levels(df_cs[[var]]) <- seq_len(length(levels(df_cs[[var]])))
+#   df_cs[[var]] <- as.numeric(df_cs[[var]])
+# }
+
+```
+
+
+
+```{r k means clustering, warning=FALSE}
+
+set.seed(40385928)
+#scaling data for standardisation
+df_cs1 <- df_cs%>%
+  mutate_if(is.factor, as.numeric)
+ df_cs1 <-  scale(df_cs1) 
+# k means algorithm for k =4
+set.seed(40385928)
+seg_kmeans1 <- kmeans(df_cs1,4, nstart=50)
+
+cat("Available components of seg_kmeans1 are as following: ")
+# cat("Centers:", seg_kmeans1$centers, "\n")
+cat(" total ss:", seg_kmeans1$totss, "\n","within ss:", seg_kmeans1$withinss, "\n", 
+    "total within ss:", seg_kmeans1$tot.withinss, "\n","between ss:", seg_kmeans1$betweenss, "\n", 
+    "size:", seg_kmeans1$size, "\n", "iter:", seg_kmeans1$iter, "\n")
+
+cluster = seg_kmeans1$cluster #segregating cluster column from segmented dataset
+df_seg <- df_new
+df_seg <- cbind(df_seg,cluster) #binding new cluster column to original data set
+
+
+```
+
+
+```{r data balancing}
+
+# extracting top 20 features and converting into a vector
+top_features <- importance_df$Feature[1:20]
+selected_Variables <- as.vector(top_features)
+#### DATA BALANCING FOR FULL DATA ######
+# downsampled_data <- df_featured
+# Subset the df_featured dataset on the top 20 features
+downsampled_data  <- df_featured%>%
+  select(all_of(selected_Variables), TARGET)
+# move TARGET column at the end
+col_names <- colnames(downsampled_data)
+new_col_order <- c(col_names[-1], col_names[1])
+
+downsampled_data <- downsampled_data[new_col_order]
+
+# Count  of each target class
+count_class <- table(downsampled_data$TARGET)
+
+# Determine the minority class label
+down_class <- names(which.min(count_class))
+
+# Downsampling: Select random instances from the majority class to match minority class size
+set.seed(40385928)
+downsampled_data <- downsampled_data %>%
+  group_by(TARGET) %>%
+  sample_n(min(count_class)) %>%
+  ungroup()
+
+#### DATA BALANCING FOR CLUSTERED DATA ######
+# balanced_data <- df_seg
+balanced_data <- df_seg%>%
+  select(all_of(selected_Variables), TARGET,cluster)
+# Count  of each target class
+count_class <- table(balanced_data$TARGET)
+
+# Determine the minority class label
+down_class <- names(which.min(count_class))
+
+# Downsampling: Select random instances from the majority class to match minority class size
+set.seed(40385928)
+balanced_data <- balanced_data %>%
+  group_by(TARGET) %>%
+  sample_n(min(count_class)) %>%
+  ungroup()
+
+
+```
+
+
+
+```{r data split}
+
+# set seed for randomness
+set.seed(40385928) #'[for random sampling]
+
+# creating partition to split data into 80-20 ratio
+index_lr <- createDataPartition(downsampled_data$TARGET, p=0.8, list=FALSE) 
+
+# train data set containing 80% data
+train_lr <- downsampled_data[index_lr,] 
+
+# test data set containing 20% data
+test_lr <- downsampled_data[-index_lr,]
+```
+
+
+
+```{r Logistic Regression}
+
+# creating formula of top 20 important features
+# formula =TARGET ~ EXT_SOURCE_3 + EXT_SOURCE_2 + ORGANIZATION_TYPE + OCCUPATION_TYPE + BUREAU_AMT_CREDIT_SUM + YRS_ID_PUBLISH + YRS_REGISTRATION + YRS_EMPLOYED + BUREAU_DAYS_CREDIT_UPDATE + DAYS_LAST_PHONE_CHANGE + BUREAU_DAYS_CREDIT + BUREAU_DAYS_CREDIT_ENDDATE + CREDIT_TERM + BUREAU_DAYS_ENDDATE_FACT + WEEKDAY_APPR_PROCESS_START + CREDIT_INCOME_RATIO + AMT_ANNUITY + POS_MONTHS_BALANCE + AMT_CREDIT + AGE
+formula= TARGET ~EXT_SOURCE_3 + ORGANIZATION_TYPE + EXT_SOURCE_2 + OCCUPATION_TYPE + YRS_EMPLOYED + YRS_ID_PUBLISH + YRS_REGISTRATION + BUREAU_AMT_CREDIT_SUM + CREDIT_TERM + BUREAU_DAYS_CREDIT_UPDATE + BUREAU_DAYS_CREDIT_ENDDATE + DAYS_LAST_PHONE_CHANGE + BUREAU_DAYS_CREDIT + WEEKDAY_APPR_PROCESS_START + BUREAU_DAYS_ENDDATE_FACT + CREDIT_INCOME_RATIO + POS_MONTHS_BALANCE + AMT_ANNUITY + AMT_CREDIT 
+
+
+### LR model fitting on train dataset 
+glm.fits <- glm(formula = formula, data = train_lr, family = "binomial")
+summary(glm.fits)
+
+# prediction on test dataset using trained model
+predictions <- predict.glm(glm.fits, test_lr,family = "binomial", type="response") 
+
+# changing numeric values of predictions into factor ; >0.5 as 1 and <0.5 as 0
+class_predict <- as.factor(ifelse(predictions > 0.5, "1", "0"))  
+
+postResample(class_predict, test_lr$TARGET) 
+
+# creating confusion matrix
+cm <- confusionMatrix(data=class_predict, test_lr$TARGET)  #'[to check True/false positive/negatives]
+cm_df <- as.data.frame(cm$table)
+
+# Plot the confusion matrix
+ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", cex= 15) +
+  labs(x = "True Labels", y = "Predicted Labels") +
+  theme_minimal()+
+  theme(
+    axis.text = element_text(size = 25),    # Increase text size for axis labels
+    axis.title = element_text(size = 25)    # Increase text size for axis titles
+  )
+
+# Calculate accuracy
+accuracy <- mean(class_predict == test_lr$TARGET) * 100
+
+# Calculate precision score
+precision <- cm$byClass["Pos Pred Value"]
+
+# Calculate recall score (also known as sensitivity or true positive rate)
+recall <- cm$byClass["Sensitivity"]
+
+# Calculate F1 score
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+# Print the scores
+cat(" Accuracy:", round(accuracy,2),"%", "\n", "Precision Score:", round(precision,2), "\n","Recall Score:", round(recall,2),
+    "\n","F1 Score:", round(f1_score,2) )
+
+# Create a ROC curve
+roc_lr <- roc(test_lr$TARGET, as.numeric(class_predict))
+
+# Plot the ROC curve
+plot(roc_lr, main = "ROC Curve for Logistic Regression", print.auc=TRUE)
+
+# Calculate the AUC
+AUC_lr <- auc(roc_lr)
+
+# Print the AUC
+print(paste("AUC:", AUC_lr))
+```
+
+
+```{r Random Forest}
+# Split the data into training and testing sets
+set.seed(40385928)  # For reproducibility
+x_train_rf <- train_lr%>%
+  select(-TARGET)
+y_train_rf <- train_lr$TARGET
+x_test_rf <- test_lr%>%
+  select(-TARGET)
+y_test_rf <- test_lr$TARGET
+
+# Train a Random Forest model
+rf_model <- randomForest(x = x_train_rf, y = y_train_rf, ntree = 100)
+
+# Make predictions on the test set
+predictions_rf <- predict(rf_model, newdata = x_test_rf,type="response")
+
+postResample(predictions_rf, y_test_rf) 
+cm_rf <- confusionMatrix(data=predictions_rf, y_test_rf)  #'[to check True/false positive/negatives]
+cm_df_rf <- as.data.frame(cm_rf$table)
+
+# Plot the confusion matrix
+ggplot(cm_df_rf, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", cex= 15) +
+  labs(x = "True Labels", y = "Predicted Labels") +
+  theme_minimal()+
+  theme(
+    axis.text = element_text(size = 25),    # Increase text size for axis labels
+    axis.title = element_text(size = 25)    # Increase text size for axis titles
+  )
+
+# Evaluate model performance
+accuracy_rf <- sum(predictions_rf == y_test_rf) / length(y_test_rf)
+
+# Calculate precision score
+precision_rf <- cm_rf$byClass["Pos Pred Value"]
+
+# Calculate recall score (also known as sensitivity or true positive rate)
+recall_rf <- cm_rf$byClass["Sensitivity"]
+
+# Calculate F1 score
+f1_score_rf <- 2 * (precision_rf * recall_rf) / (precision_rf + recall_rf)
+
+# Print the scores
+cat(" Accuracy:", round(accuracy_rf,2),"%", "\n", "Precision Score:", round(precision_rf,2), "\n","Recall Score:", round(recall_rf,2),
+    "\n","F1 Score:", round(f1_score_rf,2) )
+
+# Create a ROC curve
+roc_rf <- roc(as.numeric(y_test_rf),as.numeric(predictions_rf))
+
+# Plot the ROC curve
+plot(roc_rf, main = "ROC Curve for Random Forest", print.auc=TRUE)
+
+# Calculate the AUC
+AUC_rf <- auc(roc_rf)
+
+# Print the AUC
+print(paste("AUC:", AUC_rf))
+
+```
+
+
+```{r XGBoost}
+
+top_features <- importance_df$Feature[1:20]
+selected_Variables <- as.vector(top_features)
+# Split the data into training and testing sets
+set.seed(40385928)  # For reproducibility
+# changing factor variables into numeric
+x_train_xgb <- train_lr%>%
+  mutate_if(is.factor, as.numeric)
+
+# subsetting x_train_xgb on selected variables
+x_train_xgb <- x_train_xgb[selected_Variables]
+
+# creating target variable vector
+y_train_xgb <- as.numeric(train_lr$TARGET)-1
+
+# creating test data
+x_test_xgb <- test_lr%>%
+  mutate_if(is.factor, as.numeric)
+x_test_xgb <- x_test_xgb[selected_Variables]
+y_test_xgb <- test_lr$TARGET
+
+# Create the XGBoost data matrix
+dtrain <- xgb.DMatrix(data = as.matrix(x_train_xgb), label = (y_train_xgb))
+dtest <- xgb.DMatrix(data = as.matrix(x_test_xgb))
+
+# Set the parameters for the XGBoost model
+params <- list(
+  objective = "binary:logistic", # Binary classification
+  boosting_type = "gbdt",
+  eval_metric = "logloss",       # Logarithmic loss
+  max_depth = 3,                 # Maximum depth of the tree
+  eta = 0.3,                     # Learning rate
+  nrounds = 100                  # Number of boosting rounds
+)
+
+# Train the XGBoost model
+model_xgb <- xgboost(data = dtrain, params = params, nrounds = 100)
+
+# Make predictions on the testing data
+predictions_xgb <- predict(model_xgb, newdata = dtest)
+
+# Convert the predictions to binary classes (0 or 1)
+class_predict_xgb <- ifelse(predictions_xgb > 0.5, 1, 0)
+
+postResample(class_predict_xgb, y_test_xgb) 
+cm_xgb <- confusionMatrix(data=as.factor(class_predict_xgb), y_test_xgb)  #'[to check True/false positive/negatives]
+cm_xgb_df <- as.data.frame(cm_xgb$table)
+
+# Plot the confusion matrix
+ggplot(cm_xgb_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", cex= 15) +
+  labs(x = "True Labels", y = "Predicted Labels") +
+  theme_minimal()+
+  theme(
+    axis.text = element_text(size = 25),    # Increase text size for axis labels
+    axis.title = element_text(size = 25)    # Increase text size for axis titles
+  )
+
+# Evaluate the model's accuracy
+accuracy_xgb <- sum(as.factor(class_predict_xgb) == y_test_xgb) / length(y_test_xgb)*100
+
+# Calculate precision score
+precision_xgb <- cm_xgb$byClass["Pos Pred Value"]
+
+# Calculate recall score (also known as sensitivity or true positive rate)
+recall_xgb <- cm_xgb$byClass["Sensitivity"]
+
+# Calculate F1 score
+f1_score_xgb <- 2 * (precision_xgb * recall_xgb) / (precision_xgb + recall_xgb)
+
+# Print the scores
+cat(" Accuracy:", round(accuracy_xgb,2),"%", "\n", "Precision Score:", round(precision_xgb,2), "\n","Recall Score:", round(recall_xgb,2),
+    "\n","F1 Score:",round(f1_score_xgb,2) )
+
+# Create a ROC curve
+# roc_xgb <- roc(as.numeric(y_test_xgb)-1, as.numeric(predictions_xgb))
+roc_xgb <- roc(y_test_xgb, predictions_xgb)
+# Plot the ROC curve
+plot(roc_xgb, main = "ROC Curve for XGBoost", print.auc=TRUE)
+
+# Calculate the AUC
+AUC_xgb <- auc(roc_xgb)
+
+# Print the AUC
+print(paste("AUC:", AUC_xgb))
+
+```
+
+
+```{r Naive Bayes}
+
+# Train the naive bayes model
+model_naive_bayes <- naive_bayes(formula, data = train_lr)
+
+# Make predictions on the test data
+predictions_nb <- predict(model_naive_bayes, newdata = test_lr)
+
+# # Convert the predictions to binary classes (0 or 1)
+# class_predict_nb <- ifelse(predictions_nb > 0.5, 1, 0)
+
+postResample(predictions_nb, test_lr$TARGET) 
+cm_nb <- confusionMatrix(data=(predictions_nb), test_lr$TARGET)  #'[to check True/false positive/negatives]
+cm_nb_df <- as.data.frame(cm_nb$table)
+
+# Plot the confusion matrix
+ggplot(cm_nb_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", cex= 15) +
+  labs(x = "True Labels", y = "Predicted Labels") +
+  theme_minimal()+
+  theme(
+    axis.text = element_text(size = 25),    # Increase text size for axis labels
+    axis.title = element_text(size = 25)    # Increase text size for axis titles
+  )
+
+# Evaluate the model's accuracy
+accuracy_nb <- sum(predictions_nb == test_lr$TARGET) / nrow(test_lr)*100
+
+# Calculate precision score
+precision_nb <- cm_nb$byClass["Pos Pred Value"]
+
+# Calculate recall score (also known as sensitivity or true positive rate)
+recall_nb <- cm_nb$byClass["Sensitivity"]
+
+# Calculate F1 score
+f1_score_nb <- 2 * (precision_nb * recall_nb) / (precision_nb + recall_nb)
+
+# Print the scores
+cat(" Accuracy:", round(accuracy_nb,2),"%", "\n", "Precision Score:", round(precision_nb,2), "\n","Recall Score:", round(recall_nb,2),
+    "\n","F1 Score:",round(f1_score_nb,2) )
+
+# Create a ROC curve
+roc_nb <- roc(test_lr$TARGET, as.numeric(predictions_nb)-1)
+
+# Plot the ROC curve
+plot(roc_nb, main = "ROC Curve for Naive Bayes", print.auc=TRUE)
+
+# Calculate the AUC
+AUC_nb <- auc(roc_nb)
+
+# Print the AUC
+print(paste("AUC:", AUC_nb))
+```
+
+
+```{r SVM}
+# Train the SVM model
+svm_model <- svm(y_train_xgb ~ ., data = x_train_xgb, kernel = "radial")
+
+# Make predictions on the test data
+predictions_svm <- predict(svm_model, newdata = x_test_xgb)
+
+# Convert the predictions to binary classes (0 or 1)
+class_predict_svm <- ifelse(predictions_svm > 0.5, 1, 0)
+
+postResample(class_predict_svm, y_test_xgb) 
+
+cm_svm <- confusionMatrix(data=as.factor(class_predict_svm), y_test_xgb)  #'[to check True/false positive/negatives]
+cm_svm_df <- as.data.frame(cm_svm$table)
+
+# Plot the confusion matrix
+ggplot(cm_svm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", cex= 15) +
+  labs(x = "True Labels", y = "Predicted Labels") +
+  theme_minimal()+
+  theme(
+    axis.text = element_text(size = 25),    # Increase text size for axis labels
+    axis.title = element_text(size = 25)    # Increase text size for axis titles
+  )
+
+# Calculate accuracy
+accuracy_svm <- sum(class_predict_svm == y_test_xgb) / length(y_test_xgb)
+
+# Calculate precision score
+precision_svm <- cm_svm$byClass["Pos Pred Value"]
+
+# Calculate recall score (also known as sensitivity or true positive rate)
+recall_svm <- cm_svm$byClass["Sensitivity"]
+
+# Calculate F1 score
+f1_score_svm <- 2 * (precision_svm * recall_svm) / (precision_svm + recall_svm)
+
+# Print the scores
+cat(" Accuracy:", round(accuracy_svm,2),"%", "\n", "Precision Score:", round(precision_svm,2), "\n","Recall Score:", round(recall_svm,2),
+    "\n","F1 Score:",round(f1_score_svm,2) )
+
+# Create a ROC curve
+roc_svm <- roc(y_test_xgb, predictions_svm)
+
+# Plot the ROC curve
+plot(roc_svm, main = "ROC Curve for SVM", print.auc=TRUE)
+
+# Calculate the AUC
+AUC_svm <- auc(roc_svm)
+
+# Print the AUC
+print(paste("AUC:", AUC_svm))
+
+```
+
+```{r ANN}
+
+
+# Train the neural network
+model_mlp <- nnet(formula, data = train_lr, size = 10, decay = 1e-5, maxit = 1000)
+
+# Make predictions on the test data
+predictions_mlp <- predict(model_mlp, newdata = test_lr, type = "class")
+
+# Evaluate the model's accuracy
+accuracy_mlp <- sum(predictions_mlp == test_lr$TARGET) / length(test_lr$TARGET)
+print(paste("Accuracy:", accuracy_mlp))
+
+```
+
+```{r data split for clustered data}
+
+# set seed for randomness
+set.seed(40385928) #'[for random sampling]
+
+# creating partition to split data into 80-20 ratio
+index_lr <- createDataPartition(balanced_data$TARGET, p=0.8, list=FALSE) 
+
+# train data set containing 80% data
+train_lr <- balanced_data[index_lr,] 
+
+# test data set containing 20% data
+test_lr <- balanced_data[-index_lr,]
+
+```
+
+
+```{r Logistic Regression for cluster, warning=FALSE}
+# Function to fit logistic regression and return the model
+fit_lr <- function(data) {
+  model <- glm(formula = formula, data = data, family = binomial)
+  return(model)
+}
+
+# List to store models for each cluster
+cluster_models <- list()
+
+for (i in 1:4) {
+  cluster_data <- train_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  cluster_models[[i]] <- fit_lr(cluster_data)
+}
+
+# # summary of LR for each cluster
+# for (i in 1:4) {
+#   cat("Summary for Cluster", i, ":\n")
+#   print(summary(cluster_models[[i]]))
+#   cat("\n")
+# }
+
+# List to store evaluation results for each cluster model
+evaluation_results_lr <- list()
+
+# Create empty vectors to store metric values for all clusters
+accuracy_values <- numeric()
+precision_values <- numeric()
+recall_values <- numeric()
+f1_score_values <- numeric()
+auc_values <- numeric()
+for (i in 1:4) {
+  # Get the test data for the cluster
+  cluster_test_data <- test_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Extract the model for the cluster
+  model1 <- cluster_models[[i]]
+
+  # Make sure categorical variables in test data have the same levels as in training data
+  for (var in names(cluster_test_data)[sapply(cluster_test_data, is.factor)]) {
+    levels(cluster_test_data[[var]]) <- levels(train_lr[[var]])
+  }
+  # Apply filter only for cluster 2
+ if (i == 2) {
+    cluster_test_data <- cluster_test_data %>%
+      filter(!ORGANIZATION_TYPE %in% c(2))
+  }
+   if (i == 2) {
+    cluster_test_data <- cluster_test_data %>%
+      filter(!OCCUPATION_TYPE %in% c(8))
+  }
+  # Make predictions on test data
+  predictions1_lr <- predict(model1, newdata = cluster_test_data, type = "response")
+  
+  # Convert predictions to binary class labels
+  predicted_class1_lr <- ifelse(predictions1_lr > 0.5, 1, 0)
+  
+  # Calculate evaluation metrics
+  cm_lr <- confusionMatrix(data = factor(predicted_class1_lr), reference = factor(cluster_test_data$TARGET))
+  
+  # Calculate accuracy
+  accuracy_lr <- cm_rf$overall["Accuracy"]
+  
+  # Calculate precision score
+  precision_lr <- cm_rf$byClass["Pos Pred Value"]
+  
+  # Calculate recall score (also known as sensitivity or true positive rate)
+  recall_lr <- cm_rf$byClass["Sensitivity"]
+  
+  # Calculate F1 score
+  f1_score_lr <- 2 * (precision_lr * recall_lr) / (precision_lr + recall_lr)
+  
+  # Calculate AUC 
+  auc_lr <- auc(roc(cluster_test_data$TARGET, predicted_class1_lr))
+  
+  # Store metric values in vectors
+  accuracy_values <- c(accuracy_values, accuracy_lr)
+  precision_values <- c(precision_values, precision_lr)
+  recall_values <- c(recall_values, recall_rf)
+  f1_score_values <- c(f1_score_values, f1_score_rf)
+  auc_values <- c(auc_values, auc_lr)
+
+  # Store evaluation metrics in the list
+  evaluation_results_lr[[i]] <- list(cm_lr,
+    Accuracy = accuracy_lr,
+    Precision = precision_lr,
+    Recall = recall_lr,
+    F1_Score = f1_score_lr,
+    auc = auc_lr
+  )
+}
+
+# Calculate average metrics across all clusters
+average_accuracy_lr <- mean(accuracy_values)
+average_precision_lr <- mean(precision_values)
+average_recall_lr <- mean(recall_values)
+average_f1_score_lr <- mean(f1_score_values)
+average_auc_lr <- mean(auc_values)
+# Print average performance metrics for the entire dataset
+cat("Average Performance Metrics of Random Forest for clustered data:\n")
+cat("Average Accuracy:", average_accuracy_lr, "\n")
+cat("Average Precision:", average_precision_lr, "\n")
+cat("Average Recall:", average_recall_lr, "\n")
+cat("Average F1 Score:", average_f1_score_lr, "\n")
+cat("Average AUC:", average_auc_lr, "\n")
+cat("\n")
+
+# Print evaluation results for each cluster
+for (i in 1:4) {
+  cat("Evaluation Metrics for Cluster", i, ":\n")
+  print(evaluation_results_lr[[i]])
+  cat("\n")
+}
+
+```
+
+
+```{r RF for clusters}
+cluster_models_rf <- list()
+
+for (i in 1:4) {
+  # Get the data for the cluster
+  cluster_data_rf <- train_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Separate target variable and predictors
+  y_train <- cluster_data_rf$TARGET
+  X_train <- cluster_data_rf %>%
+    select(-TARGET)
+  
+  # Fit the Random Forest model
+  model_rf <- randomForest(x = X_train, y = y_train, ntree = 100)  # You can adjust ntree as needed
+  
+  # Store the fitted model in the list
+  cluster_models_rf[[i]] <- model_rf
+}
+
+# List to store evaluation results for each cluster model
+evaluation_results_rf <- list()
+
+# Create empty vectors to store metric values for all clusters
+accuracy_values <- numeric()
+precision_values <- numeric()
+recall_values <- numeric()
+f1_score_values <- numeric()
+auc_rf <- numeric()
+for (i in 1:4) {
+  # Get the test data for the cluster
+  cluster_test_data_rf <- test_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+    # Separate target variable and predictors
+  y_test_rf <- cluster_test_data_rf$TARGET
+  X_test_rf <- cluster_test_data_rf %>%
+    select(-TARGET)
+  # Extract the model for the cluster
+  model1_rf <- cluster_models_rf[[i]]
+  
+  # Make sure categorical variables in test data have the same levels as in training data
+  for (var in names(cluster_test_data_rf)[sapply(cluster_test_data_rf, is.factor)]) {
+    levels(cluster_test_data_rf[[var]]) <- levels(train_lr[[var]])
+  }
+  
+  # Make predictions on test data
+  predictions1_rf <- predict(model1_rf, newdata = X_test_rf, type = "response")
+  
+  # Calculate confusion matrix
+  cm_rf <- confusionMatrix(data = factor(predictions1_rf), reference = factor(y_test_rf))
+  
+  # Calculate accuracy
+  accuracy_rf <- cm_rf$overall["Accuracy"]
+  
+  # Calculate precision score
+  precision_rf <- cm_rf$byClass["Pos Pred Value"]
+  
+  # Calculate recall score (also known as sensitivity or true positive rate)
+  recall_rf <- cm_rf$byClass["Sensitivity"]
+  
+  # Calculate F1 score
+  f1_score_rf <- 2 * (precision_rf * recall_rf) / (precision_rf + recall_rf)
+  
+  # Calculate AUC 
+  auc_rf <- auc(roc(y_test_rf,as.numeric(predictions1_rf)-1))
+
+  # Store metric values in vectors
+  accuracy_values <- c(accuracy_values, accuracy_rf)
+  precision_values <- c(precision_values, precision_rf)
+  recall_values <- c(recall_values, recall_rf)
+  f1_score_values <- c(f1_score_values, f1_score_rf)
+  auc_values <- c(auc_values, auc_rf)
+
+  # Store evaluation metrics in the list
+  evaluation_results_rf[[i]] <- list(cm_rf,
+    Accuracy = accuracy_rf,
+    Precision = precision_rf,
+    Recall = recall_rf,
+    F1_Score = f1_score_rf,
+    auc = auc_rf
+  )
+}
+
+# Calculate average metrics across all clusters
+average_accuracy_rf <- mean(accuracy_values)
+average_precision_rf <- mean(precision_values)
+average_recall_rf <- mean(recall_values)
+average_f1_score_rf <- mean(f1_score_values)
+average_auc_rf <- mean(auc_values)
+
+# Print average performance metrics for the entire dataset
+cat("Average Performance Metrics of Random Forest for clustered data:\n")
+cat("Average Accuracy:", average_accuracy_rf, "\n")
+cat("Average Precision:", average_precision_rf, "\n")
+cat("Average Recall:", average_recall_rf, "\n")
+cat("Average F1 Score:", average_f1_score_rf, "\n")
+cat("Average AUC:", average_auc_rf, "\n")
+cat("\n")
+
+
+# Print evaluation results for each cluster
+for (i in 1:4) {
+  cat("Performance Metrics for Cluster", i, ":\n")
+  print(evaluation_results_rf[[i]])
+  cat("\n")
+}
+
+```
+
+```{r XGBoost for clusters}
+
+# Split the data into training and testing sets
+set.seed(40385928)  # For reproducibility
+# changing factor variables into numeric
+x_train_xgb <- train_lr%>%
+  select(-TARGET)%>%
+  mutate_if(is.factor, as.numeric)
+
+# subsetting x_train_xgb on selected variables
+x_train_xgb <- x_train_xgb %>%
+  select(all_of(selected_Variables), cluster)
+
+# creating target variable 
+y_train_xgb <- train_lr%>%
+  select(TARGET,cluster)
+y_train_xgb$TARGET <- as.numeric(y_train_xgb$TARGET)-1
+
+# creating test data
+x_test_xgb <- test_lr%>%
+  select(-TARGET)%>%
+  mutate_if(is.factor, as.numeric)
+
+# subsetting x_test_xgb on selected variables
+x_test_xgb <- x_test_xgb%>%
+  select(all_of(selected_Variables), cluster)
+
+# creating target variable for test set
+y_test_xgb <- test_lr%>%
+  select(TARGET,cluster)
+y_test_xgb$TARGET <- as.numeric(y_test_xgb$TARGET)-1
+
+# List to store XGBoost models for each cluster
+cluster_models_xgb <- list()
+
+# List to store evaluation results for each cluster model
+evaluation_results_xgb <- list()
+
+# Create empty vectors to store metric values for all clusters
+accuracy_values <- numeric()
+precision_values <- numeric()
+recall_values <- numeric()
+f1_score_values <- numeric()
+auc_values <- numeric()
+
+# Loop through each cluster
+for (i in 1:4) {
+  # Get the training data for the cluster
+  cluster_train_data_xgb <- x_train_xgb %>%
+    filter(cluster ==i) %>%
+    # select(all_of(selected_Variables))%>%
+    select(-cluster)
+  
+  cluster_y_train_xgb <- y_train_xgb%>%
+    filter(cluster == i)%>%
+    select(TARGET)
+  
+  # Create a data matrix and label vector
+   dtrain <- xgb.DMatrix(data = as.matrix(cluster_train_data_xgb), label = cluster_y_train_xgb$TARGET)
+  
+  # Set XGBoost parameters
+  params <- list(
+    objective = "binary:logistic",
+    booster = "gbtree",
+    eval_metric = "logloss",
+    eta = 0.1,
+    max_depth = 3,
+    subsample = 0.8
+  )
+  
+  # Train the XGBoost model
+  num_round <- 100
+  model_xgb <- xgboost(params = params, data = dtrain, nrounds = num_round)
+  
+  # Store the model in the cluster_models list
+  cluster_models_xgb[[i]] <- model_xgb
+  
+  # Get the test data for the cluster
+  cluster_test_data_xgb <- x_test_xgb %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  cluster_y_test_xgb <- y_test_xgb%>%
+    filter(cluster == i)%>%
+    select(TARGET)
+
+  # Create a data matrix for test data
+  dtest <- xgb.DMatrix(data = as.matrix(cluster_test_data_xgb))
+  
+  # Make predictions on test data
+  predictions_xgb <- predict(model_xgb, newdata = dtest)
+  
+  # Convert predictions to binary class labels
+  predicted_class_xgb <- ifelse(predictions_xgb > 0.5, 1, 0)
+  
+  # Calculate evaluation metrics
+  cm_xgb <- confusionMatrix(data = factor(predicted_class_xgb), reference = factor(cluster_y_test_xgb$TARGET))
+  
+  # Calculate accuracy
+  accuracy_xgb <- cm_xgb$overall["Accuracy"]
+  
+  # Calculate precision score
+  precision_xgb <- cm_xgb$byClass["Pos Pred Value"]
+  
+  # Calculate recall score (also known as sensitivity or true positive rate)
+  recall_xgb <- cm_xgb$byClass["Sensitivity"]
+  
+  # Calculate F1 score
+  f1_score_xgb <- 2 * (precision_xgb * recall_xgb) / (precision_xgb + recall_xgb)
+  
+  # Calculate AUC 
+  auc_xgb <- auc(roc(predicted_class_xgb,cluster_y_test_xgb$TARGET))
+
+  # Store metric values in vectors
+  accuracy_values <- c(accuracy_values, accuracy_xgb)
+  precision_values <- c(precision_values, precision_xgb)
+  recall_values <- c(recall_values, recall_xgb)
+  f1_score_values <- c(f1_score_values, f1_score_xgb)
+  auc_values <- c(auc_values, auc_xgb)
+  # Store evaluation metrics in the list
+  evaluation_results_xgb[[i]] <- list(cm_xgb,
+    Accuracy = accuracy_xgb,
+    Precision = precision_xgb,
+    Recall = recall_xgb,
+    F1_Score = f1_score_xgb,
+    auc = auc_xgb
+  )
+}
+
+# Calculate average metrics across all clusters
+average_accuracy_xgb <- mean(accuracy_values)
+average_precision_xgb <- mean(precision_values)
+average_recall_xgb <- mean(recall_values)
+average_f1_score_xgb <- mean(f1_score_values)
+average_auc_xgb <- mean(auc_values)
+# Print average performance metrics for the entire dataset
+cat("Average Performance Metrics of XG Boost for clustered data:\n")
+cat("Average Accuracy:", average_accuracy_xgb, "\n")
+cat("Average Precision:", average_precision_xgb, "\n")
+cat("Average Recall:", average_recall_xgb, "\n")
+cat("Average F1 Score:", average_f1_score_xgb, "\n")
+cat("Average AUC:", average_auc_xgb, "\n")
+cat("\n")
+
+# Print evaluation results for each cluster
+for (i in 1:4) {
+  cat("Evaluation Metrics for Cluster", i, ":\n")
+  print(evaluation_results_xgb[[i]])
+  cat("\n")
+}
+
+```
+
+
+```{r Naive bayes for clusters}
+
+# List to store Naive Bayes models for each cluster
+cluster_models_nb <- list()
+
+# List to store evaluation results for each cluster model
+evaluation_results_nb <- list()
+
+# Create empty vectors to store metric values for all clusters
+accuracy_values <- numeric()
+precision_values <- numeric()
+recall_values <- numeric()
+f1_score_values <- numeric()
+auc_values <- numeric()
+# Loop through each cluster
+for (i in 1:4) {
+  # Get the training data for the cluster
+  cluster_train_data_nb <- train_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Fit a Naive Bayes model
+  model_nb <- naiveBayes(TARGET ~ ., data = cluster_train_data_nb)
+  
+  # Store the model in the cluster_models list
+  cluster_models_nb[[i]] <- model_nb
+  
+  # Get the test data for the cluster
+  cluster_test_data_nb <- test_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Make predictions on test data
+  predictions_nb <- predict(model_nb, newdata = cluster_test_data_nb)
+  
+  # Calculate evaluation metrics
+  cm_nb <- confusionMatrix(data = predictions_nb, reference = factor(cluster_test_data_nb$TARGET))
+  
+# Calculate accuracy
+  accuracy_nb <- cm_nb$overall["Accuracy"]
+  
+  # Calculate precision score
+  precision_nb <- cm_nb$byClass["Pos Pred Value"]
+  
+  # Calculate recall score (also known as sensitivity or true positive rate)
+  recall_nb <- cm_nb$byClass["Sensitivity"]
+  
+  # Calculate F1 score
+  f1_score_nb <- 2 * (precision_nb * recall_nb) / (precision_nb + recall_nb)
+  
+  # Calculate AUC 
+  auc_nb <- auc(roc(predictions_nb, as.numeric(cluster_test_data_nb$TARGET)-1))
+
+  # Store metric values in vectors
+  accuracy_values <- c(accuracy_values, accuracy_nb)
+  precision_values <- c(precision_values, precision_nb)
+  recall_values <- c(recall_values, recall_nb)
+  f1_score_values <- c(f1_score_values, f1_score_nb)
+  auc_values <- c(auc_values, auc_nb)
+
+  # Store evaluation metrics in the list
+  evaluation_results_nb[[i]] <- list(cm_nb,
+    Accuracy = accuracy_nb,
+    Precision = precision_nb,
+    Recall = recall_nb,
+    F1_Score = f1_score_nb,
+    auc = auc_nb
+  )
+}
+
+# Calculate average metrics across all clusters
+average_accuracy_nb <- mean(accuracy_values)
+average_precision_nb <- mean(precision_values)
+average_recall_nb <- mean(recall_values)
+average_f1_score_nb <- mean(f1_score_values)
+average_auc_nb <- mean(auc_values)
+
+# Print average performance metrics for the entire dataset
+cat("Average Performance Metrics of Naive Bayes for clustered data:\n")
+cat("Average Accuracy:", average_accuracy_nb, "\n")
+cat("Average Precision:", average_precision_nb, "\n")
+cat("Average Recall:", average_recall_nb, "\n")
+cat("Average F1 Score:", average_f1_score_nb, "\n")
+cat("Average AUC:", average_auc_nb, "\n")
+cat("\n")
+
+# Print evaluation results for each cluster
+for (i in 1:4) {
+  cat("Evaluation Metrics for Cluster", i, ":\n")
+  print(evaluation_results_nb[[i]])
+  cat("\n")
+}
+
+```
+
+
+```{r SVM for clusters}
+library(dplyr)
+
+# List to store SVM models for each cluster
+cluster_models_svm <- list()
+
+# List to store evaluation results for each cluster model
+evaluation_results_svm <- list()
+
+# Create empty vectors to store metric values for all clusters
+accuracy_values <- numeric()
+precision_values <- numeric()
+recall_values <- numeric()
+f1_score_values <- numeric()
+auc_values <- numeric()
+cluster_roc_svm <- numeric()
+# Loop through each cluster
+for (i in 1:4) {
+  # Get the training data for the cluster
+  cluster_train_data_svm <- train_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Fit an SVM model
+  model_svm <- svm(formula, data = cluster_train_data_svm, kernel = "radial")
+  
+  # Store the model in the cluster_models list
+  cluster_models_svm[[i]] <- model_svm
+  
+  # Get the test data for the cluster
+  cluster_test_data_svm <- test_lr %>%
+    filter(cluster == i) %>%
+    select(-cluster)
+  
+  # Make predictions on test data
+  predictions_svm <- predict(model_svm, newdata = cluster_test_data_svm)
+  
+  # Calculate evaluation metrics
+  cm_svm <- confusionMatrix(data = predictions_svm, reference = factor(cluster_test_data_svm$TARGET))
+  
+  # Calculate accuracy
+  accuracy_svm <- cm_svm$overall["Accuracy"]
+  
+  # Calculate precision score
+  precision_svm <- cm_svm$byClass["Pos Pred Value"]
+  
+  # Calculate recall score (also known as sensitivity or true positive rate)
+  recall_svm <- cm_svm$byClass["Sensitivity"]
+  
+  # Calculate F1 score
+  f1_score_svm <- 2 * (precision_svm * recall_svm) / (precision_svm + recall_svm)
+  
+  # Calculate ROC
+  roc_svm_cluster <- roc(predictions_svm, as.numeric(cluster_test_data_svm$TARGET)-1)
+  # Calculate AUC 
+  auc_svm <- auc(roc_svm_cluster)
+
+  # Store metric values in vectors
+  accuracy_values <- c(accuracy_values, accuracy_svm)
+  precision_values <- c(precision_values, precision_svm)
+  recall_values <- c(recall_values, recall_svm)
+  f1_score_values <- c(f1_score_values, f1_score_svm)
+  cluster_roc_svm <- c(cluster_roc_svm, roc_svm_cluster)
+  auc_values <- c(auc_values, auc_svm)
+  
+  # Store evaluation metrics in the list
+  evaluation_results_svm[[i]] <- list(cm_svm,
+    Accuracy = accuracy_svm,
+    Precision = precision_svm,
+    Recall = recall_svm,
+    F1_Score = f1_score_svm,
+    auc = AUC_svm
+  )
+}
+
+# Calculate average metrics across all clusters
+average_accuracy_svm <- mean(accuracy_values)
+average_precision_svm <- mean(precision_values)
+average_recall_svm <- mean(recall_values)
+average_f1_score_svm <- mean(f1_score_values)
+avearage_roc_svm <- mean(cluster_roc_svm)
+average_auc_svm <- mean(auc_values)
+
+# Print average performance metrics for the entire dataset
+cat("Average Performance Metrics of Support Vector Machine for clustered data:\n")
+cat("Average Accuracy:", average_accuracy_svm, "\n")
+cat("Average Precision:", average_precision_svm, "\n")
+cat("Average Recall:", average_recall_svm, "\n")
+cat("Average F1 Score:", average_f1_score_svm, "\n")
+cat("Average AUC:", average_auc_svm, "\n")
+cat("\n")
+
+
+# Print evaluation results for each cluster
+for (i in 1:4) {
+  cat("Evaluation Metrics for Cluster", i, ":\n")
+  print(evaluation_results_svm[[i]])
+  cat("\n")
+}
+
+```
+
+
+```{r ANN for clusters}
+# 
+# # List to store ANN models for each cluster
+# cluster_models_ann <- list()
+# 
+# # List to store evaluation results for each cluster model
+# evaluation_results_ann <- list()
+# 
+# # Loop through each cluster
+# for (i in 1:4) {
+#   # Get the training data for the cluster
+#   cluster_train_data_ann <- train_lr %>%
+#     # filter(cluster == i) %>%
+#     select(-cluster)
+#   
+#   # Create a neural network model
+#   model_ann <- neuralnet(
+#     formula,
+#     data = cluster_train_data_ann,
+#     hidden = c(5, 2),  # Specify the number of neurons in hidden layers
+#     linear.output = FALSE  # Use sigmoid activation for the output layer
+#   )
+#   
+#   # Store the model in the cluster_models list
+#   cluster_models_ann[[i]] <- model_ann
+#   
+#   # Get the test data for the cluster
+#   cluster_test_data_ann <- test_lr %>%
+#     # filter(cluster == i) %>%
+#     select(-cluster)
+#   
+#   # Make predictions on test data
+#   predictions_ann <- predict(model_ann, newdata = cluster_test_data_ann)
+#   
+#   # Convert predictions to binary class labels
+#   predicted_class_ann <- ifelse(predictions_ann[,2] > 0.5, 1, 0)
+#   
+#   # Calculate evaluation metrics
+#   eval_metrics_ann <- confusionMatrix(data = predicted_class_ann, reference = factor(cluster_test_data_ann$TARGET))
+#   
+#   # Store evaluation metrics in the list
+#   evaluation_results_ann[[i]] <- eval_metrics_ann
+# }
+# 
+# # Print evaluation results for each cluster
+# for (i in 1:4) {
+#   cat("Evaluation Metrics for Cluster", i, ":\n")
+#   print(evaluation_results_ann[[i]])
+#   cat("\n")
+# }
+```
+
+
+```{r comparison plots}
+
+# Create a vector with model names
+model_names <- c("Logistic Regression", "Random Forest", "XGBoost", "SVM", "Naive Bayes")
+
+# 1. comparing accuracy
+# Extract accuracy and average accuracy values
+acc <- c(accuracy_lr,accuracy_rf, accuracy_xgb, accuracy_svm,  accuracy_nb)
+avg_acc <- c(average_accuracy_lr, average_accuracy_rf, average_accuracy_xgb, average_accuracy_svm, average_accuracy_nb)
+
+# Create a DataFrame using the extracted values
+data <- data.frame(Model = model_names, Individual_models = acc, Cluster_based_models = avg_acc)
+
+# Reshape the data from wide to long format
+data_long <- gather(data, key = "Metric", value = "Value", -Model)
+
+# Create the bar plot with coord_flip()
+p1 <- ggplot(data_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge",alpha = 0.5) +
+  labs(x = "Model", y = "Accuracy") +
+  scale_fill_manual(values = c("Individual_models" = "blue", "Cluster_based_models" = "red")) +
+  coord_flip() +  # Flip the coordinates
+  theme_minimal()
+
+# 2. Comparing Precision score
+# Extract precision and average precision values
+prec <- c(precision_lr,precision_rf, precision_xgb, precision_svm, precision_nb)
+avg_prec <- c(average_precision_lr, average_precision_rf,average_precision_xgb, average_precision_svm, average_precision_nb)
+
+# Create a DataFrame using the extracted values
+data <- data.frame(Model = model_names, Individual_models = prec, Cluster_based_models = avg_prec)
+
+# Reshape the data from wide to long format
+data_long <- gather(data, key = "Metric", value = "Value", -Model)
+
+# Create the bar plot with coord_flip()
+p2 <- ggplot(data_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge",alpha = 0.5) +
+  labs(x = "Model", y = "Precision Score") +
+  scale_fill_manual(values = c("Individual_models" = "blue", "Cluster_based_models" = "red")) +
+  coord_flip() +  # Flip the coordinates
+  theme_minimal()
+
+# 3. comparing Recall score
+
+# Extract recall score and average recall values
+rec <- c(recall_lr, recall_rf, recall_xgb, recall_svm, recall_nb)
+avg_rec <- c(average_recall_lr, average_recall_rf,average_recall_xgb, average_recall_svm, average_recall_nb)
+
+# Create a DataFrame using the extracted values
+data <- data.frame(Model = model_names, Individual_models = rec, Cluster_based_models = avg_rec)
+
+# Reshape the data from wide to long format
+data_long <- gather(data, key = "Metric", value = "Value", -Model)
+
+# Create the bar plot with coord_flip()
+p3 <- ggplot(data_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge",alpha = 0.5) +
+  labs(x = "Model", y = "Recall Score") +
+  scale_fill_manual(values = c("Individual_models" = "blue", "Cluster_based_models" = "red")) +
+  coord_flip() +  # Flip the coordinates
+  theme_minimal()
+
+# 4. Comparing F1 score
+
+# Extract  F1 score and average F1 values
+f1s <- c(f1_score_lr, f1_score_rf, f1_score_xgb,f1_score_svm, f1_score_nb)
+avg_f1s <- c(average_f1_score_lr, average_f1_score_rf,average_f1_score_xgb, average_f1_score_svm, average_f1_score_nb)
+
+# Create a DataFrame using the extracted values
+data <- data.frame(Model = model_names, Individual_models = f1s, Cluster_based_models = avg_f1s)
+
+# Reshape the data from wide to long format
+data_long <- gather(data, key = "Metric", value = "Value", -Model)
+
+# Create the bar plot with coord_flip()
+p4 <- ggplot(data_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge",alpha = 0.5) +
+  labs(x = "Model", y = "F1 Score") +
+  scale_fill_manual(values = c("Individual_models" = "blue", "Cluster_based_models" = "red")) +
+  coord_flip() +  # Flip the coordinates
+  theme_minimal()
+
+# 5. Comparing AUC score
+
+# Extract  AUC score and average AUC values
+auc <- c(AUC_lr, AUC_rf, AUC_xgb,AUC_svm, AUC_nb)
+avg_auc <- c(average_auc_lr, average_auc_rf,average_auc_xgb, average_auc_svm, average_auc_nb)
+
+# Create a DataFrame using the extracted values
+data <- data.frame(Model = model_names, Individual_models = auc, Cluster_based_models = avg_auc)
+
+# Reshape the data from wide to long format
+data_long <- gather(data, key = "Metric", value = "Value", -Model)
+
+# Create the bar plot with coord_flip()
+p5 <- ggplot(data_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge",alpha = 0.5) +
+  labs(x = "Model", y = "AUC") +
+  scale_fill_manual(values = c("Individual_models" = "blue", "Cluster_based_models" = "red")) +
+  coord_flip() +  # Flip the coordinates
+  theme_minimal()
+# print the plots
+print(p1)
+print(p2)
+print(p3)
+print(p4)
+print(p5)
+```
+
+
+```{r AUROC comparison}
+
+### ROC Plots ####
+# Create a ggplot object for ROC curves
+roc_plot <- ggroc(list(LogisticRegression= roc_lr, SVM = roc_svm, XGBoost = roc_xgb, NaiveBayes = roc_nb, RandomForest = roc_rf))
+
+# Add AUC values to the plot
+roc_plot <- roc_plot + geom_text(aes(x = 0.8, y = 0.2, label = paste("AUC"))) + labs(title = "ROC Curves for Multiple Models") + theme_minimal()
+
+# # Customize plot appearance
+# roc_plot <- roc_plot + labs(title = "ROC Curves for Multiple Models")
+# roc_plot <- roc_plot + theme_minimal()
+# 
+# Print the plot
+print(roc_plot)
+
+```
+
+
+```{r Interpretable model}
+
+
+```
+
+
+```{r cross validation- LR}
+
+# Load the pROC package for AUC calculation
+library(pROC)
+
+# Assuming 'df' is your dataset with predictors and a binary target variable
+
+# Prepare the data matrix and response variable
+x1 <- model.matrix(TARGET ~ ., data = downsampled_data)
+y1 <- downsampled_data$TARGET
+
+# Create a 10-fold cross-validation object
+cv <- cv.glmnet(x1, y1, family = "binomial", alpha = 1)  # Use alpha = 1 for L1 regularization (Lasso)
+
+# Fit the logistic regression model with cross-validation
+fit <- glmnet(x1, y1, family = "binomial", alpha = 1, lambda = cv$lambda.min)
+
+# Print the cross-validated results
+cv
+
+# Plot the lambda path
+plot(cv)
+
+# Evaluate the model on each fold and calculate AUC for each fold
+auc_scores <- numeric(length(cv$lambda))
+for (i in seq_along(cv$lambda)) {
+  coef_i <- coef(cv, s = cv$lambda[i])
+  pred_probs <- predict(fit, newx = x1, s = cv$lambda[i], type = "response")
+  auc_scores[i] <- auc(roc(y1, pred_probs))
+}
+
+# Calculate the mean AUC score
+mean_auc <- mean(auc_scores)
+
+# Print the mean AUC score
+cat("Mean AUC Score:", mean_auc, "\n")
+
+#'x1' and 'y1' are the design matrix and binary target variable, and 'fit' is logistic regression model
+
+# Predict class probabilities on the test data
+predicted_probabilities <- predict(fit, newx = x1, s = cv$lambda.min, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted_classes <- ifelse(predicted_probabilities > 0.5, 1, 0)
+
+# Confusion Matrix
+confusion_matrix <- table(predicted_classes, y1)
+print(confusion_matrix)
+
+# Accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+cat("Accuracy:", accuracy, "\n")
+
+# Precision
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+cat("Precision:", precision, "\n")
+
+# Recall (Sensitivity)
+recall <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+cat("Recall (Sensitivity):", recall, "\n")
+
+# F1-Score
+f1_score <- 2 * (precision * recall) / (precision + recall)
+cat("F1-Score:", f1_score, "\n")
+
+# Specificity
+specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+cat("Specificity:", specificity, "\n")
+
+# Area Under the ROC Curve (ROC-AUC)
+library(pROC)
+roc_obj <- roc(y1, predicted_probabilities)
+roc_auc <- auc(roc_obj)
+cat("ROC-AUC:", roc_auc, "\n")
+
+
+
+```
+
+
+```{r CV RF}
+# Load necessary libraries
+library(caret)
+library(randomForest)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Split the data into training and testing sets (assuming you have df as your dataset)
+trainIndex <- createDataPartition(downsampled_data$TARGET, p = 0.7, list = FALSE)
+train_data_rf <- downsampled_data[trainIndex, ]
+test_data_rf <- downsampled_data[-trainIndex, ]
+
+# Define a set of values to search for ntree, nodesize, and mtry
+ntree_values <- c(100, 200, 300)
+nodesize_values <- c(1, 2, 3)
+mtry_values <- c(2, 3, 4)
+
+# Initialize variables to store the best hyperparameters and performance
+best_ntree <- NULL
+best_nodesize <- NULL
+best_mtry <- NULL
+best_performance <- -Inf  # Initialize with a low value
+
+# Define the number of folds for cross-validation
+num_folds <- 10  # Adjust as needed
+
+# Iterate over ntree, nodesize, and mtry values
+for (ntree in ntree_values) {
+  for (nodesize in nodesize_values) {
+    for (mtry in mtry_values) {
+      # Initialize a variable to store cross-validated performance
+      cv_performance <- 0
+      
+      # Perform cross-validation
+      for (fold in 1:num_folds) {
+        # Split the data into training and validation folds for each fold
+        fold_indices <- createDataPartition(train_data_rf$TARGET, p = 0.8, list = FALSE)
+        training_fold <- train_data_rf[fold_indices, ]
+        validation_fold <- train_data_rf[-fold_indices, ]
+        
+        # Train the model with the current hyperparameters on the training fold
+        rf_model <- randomForest(
+          TARGET ~ .,
+          data = training_fold,
+          mtry = mtry,
+          ntree = ntree,
+          nodesize = nodesize
+        )
+        
+        # Make predictions on the validation fold
+        predictions_rf <- predict(rf_model, newdata = validation_fold, type = "response")
+        
+        # Evaluate model performance on the validation fold
+        # Calculate the evaluation metric of interest (e.g., accuracy)
+        performance <- sum(predictions_rf == validation_fold$TARGET) / length(validation_fold$TARGET)
+        
+        # Accumulate the cross-validated performance
+        cv_performance <- cv_performance + performance
+      }
+      
+      # Calculate the average cross-validated performance
+      cv_performance <- cv_performance / num_folds
+      
+      # Check if the current cross-validated performance is better than the best
+      if (cv_performance > best_performance) {
+        best_ntree <- ntree
+        best_nodesize <- nodesize
+        best_mtry <- mtry
+        best_performance <- cv_performance
+      }
+    }
+  }
+}
+
+# Train the final model with the best hyperparameters
+final_rf_model <- randomForest(
+  TARGET ~ .,
+  data = train_data_rf,
+  mtry = best_mtry,
+  ntree = best_ntree,
+  nodesize = best_nodesize
+)
+
+# Make predictions on the test set
+predictions_rf <- predict(final_rf_model, newdata = test_data_rf, type = "response")
+
+# Evaluate model performance
+confusion_matrix <- confusionMatrix(predictions_rf, test_data_rf$TARGET)
+
+# Extract evaluation metrics
+accuracy_rf <- confusion_matrix$overall["Accuracy"]
+precision_rf <- confusion_matrix$byClass["Pos Pred Value"]
+recall_rf <- confusion_matrix$byClass["Sensitivity"]
+f1_score_rf <- confusion_matrix$byClass["F1"]
+
+# Print evaluation metrics
+cat("Accuracy:", round(accuracy_rf, 2), "\n")
+cat("Precision:", round(precision_rf, 2), "\n")
+cat("Recall:", round(recall_rf, 2), "\n")
+cat("F1-Score:", round(f1_score_rf, 2), "\n")
+
+
+```
+
+
+```{r CV XGBoost}
+
+# Load required libraries
+library(caret)
+library(xgboost)
+library(pROC)
+
+# Set seed for reproducibility
+set.seed(40385928)
+# train data set containing 80% data
+train_lr <- downsampled_data[index_lr,] 
+train_data_xgb <- train_lr
+
+# Step 2: Split the data into features and the target variable
+x_train_xgb <- train_data_xgb[, -ncol(train_data_xgb)]  # Features
+y_train_xgb <- train_data_xgb$TARGET  # Target variable
+
+# Convert factor levels to valid R variable names
+y_train_xgb <- factor(y_train_xgb, labels = make.names(levels(y_train_xgb)))
+
+
+# Step 3: Create a parameter grid for hyperparameter tuning
+
+param_grid <- expand.grid(
+  nrounds = seq(100, 500, by = 100),           # Number of boosting rounds (trees)
+  max_depth = seq(3, 6, by = 1),               # Maximum tree depth
+  eta = seq(0.01, 0.2, by = 0.05),             # Learning rate
+  gamma = seq(0, 2, by = 0.5),                 # Minimum loss reduction required to make a further partition on a leaf node
+  colsample_bytree = seq(0.6, 0.9, by = 0.1),  # Fraction of features to be randomly sampled for each tree
+  min_child_weight = seq(1, 5, by = 1),        # Minimum sum of instance weight needed in a child
+  subsample = seq(0.6, 0.9, by = 0.1)          # Fraction of observations to be randomly sampled for each tree
+)
+
+# Step 4: Define the train control settings for cross-validation
+ctrl <- trainControl(
+  method = "cv",                 # Cross-validation method
+  number = 5,                   # Number of folds
+  verboseIter = TRUE,            # Print progress
+  summaryFunction = twoClassSummary,  # Evaluation metric for binary classification
+  classProbs = TRUE              # Calculate class probabilities
+)
+
+# Step 5: Perform hyperparameter tuning with cross-validation
+tuned_xgb <- train(
+  x = x_train_xgb,
+  y = y_train_xgb,
+  method = "xgbTree",            # XGBoost method
+  trControl = ctrl,             # Cross-validation settings
+  tuneGrid = param_grid          # Hyperparameter grid
+  #scale_pos_weight = 0.32
+)
+
+# Step 6: Get the best hyperparameters
+best_params <- tuned_xgb$bestTune
+
+# Step 7: Train the final XGBoost model with the best hyperparameters
+final_xgb_model <- xgboost(
+  data = xgb.DMatrix(data = x_train_xgb, label = y_train_xgb),
+  nrounds = best_params$nrounds,
+  max_depth = best_params$max_depth,
+  eta = best_params$eta,
+  gamma = best_params$gamma,
+  colsample_bytree = best_params$colsample_bytree,
+  subsample = best_params$subsample
+)
+
+# Step 8: Evaluate the final model with cross-validation
+final_xgb_cv <- train(
+  x = x_train_xgb,
+  y = y_train_xgb,
+  method = "xgbTree",
+  trControl = ctrl,
+  tuneGrid = data.frame(),
+  model = final_xgb_model
+)
+
+# Step 9: Print evaluation metrics for the final model
+final_predictions <- predict(final_xgb_cv, newdata = x_train_xgb)
+confusion_matrix <- confusionMatrix(final_predictions, y_train_xgb)
+
+# Extract evaluation metrics
+accuracy <- confusion_matrix$overall["Accuracy"]
+precision <- confusion_matrix$byClass["Pos Pred Value"]
+recall <- confusion_matrix$byClass["Sensitivity"]
+f1_score <- confusion_matrix$byClass["F1"]
+
+# Print evaluation metrics
+cat("Accuracy:", round(accuracy, 2), "\n")
+cat("Precision:", round(precision, 2), "\n")
+cat("Recall:", round(recall, 2), "\n")
+cat("F1-Score:", round(f1_score, 2), "\n")
+
+```
+
+
+
